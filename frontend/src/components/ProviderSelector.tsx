@@ -70,9 +70,30 @@ export default function ProviderSelector({
           .map((p) => p.name);
         onSelectionChange(configuredProviders);
 
-        // Set first configured provider as chair if not set
-        if (!chair && configuredProviders.length > 0) {
-          onChairChange(configuredProviders[0]);
+        // Set first configured provider as chair if not set or if current chair is not configured
+        if (configuredProviders.length > 0) {
+          const isChairConfigured = configuredProviders.includes(chair);
+          if (!chair || !isChairConfigured) {
+            // Prefer ollama as default chair if available, otherwise use first configured
+            const defaultChair = configuredProviders.includes('ollama')
+              ? 'ollama'
+              : configuredProviders[0];
+            onChairChange(defaultChair);
+          }
+        }
+      } else {
+        // Check if current chair is still configured, if not switch to a configured one
+        const configuredProviders = providerList
+          .filter((p) => p.configured)
+          .map((p) => p.name);
+
+        const isChairConfigured = configuredProviders.includes(chair);
+        if (!isChairConfigured && configuredProviders.length > 0) {
+          // Switch to a configured provider
+          const defaultChair = configuredProviders.includes('ollama')
+            ? 'ollama'
+            : configuredProviders[0];
+          onChairChange(defaultChair);
         }
       }
     } catch (error) {
