@@ -33,18 +33,10 @@ interface ModelInfo {
   installed?: boolean;
 }
 
-interface MLXModel {
-  repo: string;
-  description: string;
-  size: string;
-  quantization: string;
-}
-
 export const OllamaManager: React.FC = () => {
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const [installedModels, setInstalledModels] = useState<ModelInfo[]>([]);
   const [recommendedModels, setRecommendedModels] = useState<ModelInfo[]>([]);
-  const [mlxModels, setMlxModels] = useState<Record<string, MLXModel>>({});
   const [loading, setLoading] = useState(true);
   const [pullStatus, setPullStatus] = useState<Record<string, string>>({});
 
@@ -79,15 +71,6 @@ export const OllamaManager: React.FC = () => {
     }
   };
 
-  const fetchMLXModels = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/ollama/mlx/available`);
-      const data = await response.json();
-      setMlxModels(data.models || {});
-    } catch (error) {
-      console.error('Failed to fetch MLX models:', error);
-    }
-  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -96,7 +79,6 @@ export const OllamaManager: React.FC = () => {
         fetchStatus(),
         fetchInstalledModels(),
         fetchRecommendedModels(),
-        fetchMLXModels(),
       ]);
       setLoading(false);
     };
@@ -154,55 +136,6 @@ export const OllamaManager: React.FC = () => {
     }
   };
 
-  const handleDownloadMLX = async (modelKey: string) => {
-    setPullStatus((prev) => ({ ...prev, [modelKey]: 'Downloading...' }));
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ollama/mlx/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_key: modelKey }),
-      });
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-
-            if (data.error) {
-              setPullStatus((prev) => ({ ...prev, [modelKey]: `Error: ${data.error}` }));
-              return;
-            }
-
-            if (data.status) {
-              setPullStatus((prev) => ({ ...prev, [modelKey]: data.status }));
-            }
-          }
-        }
-      }
-
-      setPullStatus((prev) => ({ ...prev, [modelKey]: 'Complete' }));
-      await fetchInstalledModels();
-    } catch (error) {
-      setPullStatus((prev) => ({
-        ...prev,
-        [modelKey]: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }));
-    }
-  };
 
   const handleDeleteModel = async (modelName: string) => {
     try {
@@ -365,44 +298,6 @@ export const OllamaManager: React.FC = () => {
         </div>
       )}
 
-      {/* MLX Models from HuggingFace */}
-      {Object.keys(mlxModels).length > 0 && (
-        <div>
-          <h3 className="font-semibold mb-3">Download from HuggingFace (MLX)</h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            Optimized models for Apple Silicon (M1/M2/M3)
-          </p>
-          <div className="space-y-2">
-            {Object.entries(mlxModels).map(([key, model]) => (
-              <Card key={key} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{key}</span>
-                      <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
-                        {model.size}
-                      </span>
-                      <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded">
-                        {model.quantization}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">{model.description}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Repo: {model.repo}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDownloadMLX(key)}
-                    disabled={!!pullStatus[key]}
-                  >
-                    {pullStatus[key] || 'Download'}
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
