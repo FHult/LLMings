@@ -20,6 +20,23 @@ export interface ModelConfig {
   model: string;
 }
 
+export interface PersonalityArchetype {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+}
+
+export interface CouncilMember {
+  id: string;
+  provider: string;
+  model: string;
+  role: string;
+  archetype: string;
+  custom_personality?: string;
+  is_chair: boolean;
+}
+
 export interface FileAttachment {
   filename: string;
   content_type: string;
@@ -30,15 +47,18 @@ export interface FileAttachment {
 
 export interface SessionConfig {
   prompt: string;
-  chair: string;
-  selected_providers?: string[];
+  council_members: CouncilMember[];
   iterations: number;
   template: 'analytical' | 'creative' | 'technical' | 'balanced';
   preset: 'creative' | 'balanced' | 'precise';
   system_prompt?: string;
   autopilot: boolean;
-  model_configs?: ModelConfig[];
   files?: FileAttachment[];
+
+  // Legacy fields for backward compatibility
+  chair?: string;
+  selected_providers?: string[];
+  model_configs?: ModelConfig[];
 }
 
 export interface SessionResponse {
