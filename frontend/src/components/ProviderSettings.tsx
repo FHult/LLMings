@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import APIKeyModal from './APIKeyModal';
+import OllamaManager from './ollama/OllamaManager';
 
 interface Provider {
   name: string;
@@ -37,6 +38,7 @@ export default function ProviderSettings() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [configureProvider, setConfigureProvider] = useState<string | null>(null);
+  const [showOllamaManager, setShowOllamaManager] = useState(false);
 
   useEffect(() => {
     fetchProviders();
@@ -111,7 +113,15 @@ export default function ProviderSettings() {
             </div>
 
             <div className="provider-actions">
-              {provider.name !== 'ollama' && (
+              {provider.name === 'ollama' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowOllamaManager(true)}
+                  className="btn-action btn-primary"
+                >
+                  📦 Download Models
+                </button>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setConfigureProvider(provider.name)}
@@ -186,6 +196,23 @@ export default function ProviderSettings() {
             setConfigureProvider(null);
           }}
         />
+      )}
+
+      {/* Ollama Manager Modal */}
+      {showOllamaManager && (
+        <div className="modal-overlay" onClick={() => setShowOllamaManager(false)}>
+          <div className="modal-content ollama-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Ollama Model Management</h2>
+              <button className="modal-close" onClick={() => setShowOllamaManager(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <OllamaManager />
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`
@@ -421,6 +448,79 @@ export default function ProviderSettings() {
           padding: 3rem;
           color: #999;
           font-size: 1.125rem;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.75);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 1rem;
+        }
+
+        .modal-content {
+          background: #1a1a1a;
+          border-radius: 12px;
+          max-width: 900px;
+          width: 100%;
+          max-height: 90vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content.ollama-modal {
+          max-width: 1000px;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1.5rem 2rem;
+          border-bottom: 2px solid #333;
+        }
+
+        .modal-header h2 {
+          margin: 0;
+          font-size: 1.5rem;
+          color: #e0e0e0;
+        }
+
+        .modal-close {
+          background: none;
+          border: none;
+          color: #999;
+          font-size: 2rem;
+          line-height: 1;
+          cursor: pointer;
+          padding: 0;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+        }
+
+        .modal-body {
+          overflow-y: auto;
+          padding: 0;
+          flex: 1;
         }
       `}</style>
     </div>

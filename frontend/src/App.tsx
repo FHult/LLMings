@@ -3,10 +3,9 @@ import { useSessionStore } from '@/store/sessionStore';
 import { sessionApi } from '@/lib/api';
 import { PromptInput } from '@/components/prompt/PromptInput';
 import { LiveSession } from '@/components/session/LiveSession';
-import { OllamaManager } from '@/components/ollama/OllamaManager';
 import ProviderSettings from '@/components/ProviderSettings';
 
-type TabType = 'council' | 'ollama' | 'settings';
+type TabType = 'council' | 'settings';
 
 function App() {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'error'>('checking');
@@ -68,16 +67,6 @@ function App() {
                 }`}
               >
                 Council Session
-              </button>
-              <button
-                onClick={() => setActiveTab('ollama')}
-                className={`px-6 py-3 font-medium border-b-2 transition-colors ${
-                  activeTab === 'ollama'
-                    ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Local Models (Ollama)
               </button>
               <button
                 onClick={() => setActiveTab('settings')}
@@ -157,13 +146,6 @@ function App() {
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Ollama Tab */}
-            {activeTab === 'ollama' && (
-              <div className="max-w-4xl mx-auto">
-                <OllamaManager />
               </div>
             )}
 
