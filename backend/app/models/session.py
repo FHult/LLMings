@@ -36,8 +36,9 @@ class Session(Base):
     # Status: 'pending', 'running', 'paused', 'completed', 'failed'
     status = Column(String, default="pending", nullable=False)
 
-    # Excluded providers (JSON array of provider names)
-    excluded_providers = Column(Text, nullable=True)  # JSON serialized list
+    # Provider selection (JSON arrays)
+    selected_providers = Column(Text, nullable=True)  # JSON serialized list of selected providers
+    excluded_providers = Column(Text, nullable=True)  # JSON serialized list (for iterations)
 
     # Autopilot mode
     autopilot = Column(Boolean, default=False, nullable=False)

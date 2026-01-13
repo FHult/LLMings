@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ModelSelector } from './ModelSelector';
 import { FileUpload } from './FileUpload';
+import ProviderSelector from '@/components/ProviderSelector';
 import type { SessionConfig, Template, Preset, FileAttachment } from '@/types';
 
 export function PromptInput() {
   const [prompt, setPrompt] = useState('');
   const [chair, setChair] = useState('anthropic');
+  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [iterations, setIterations] = useState(3);
   const [template, setTemplate] = useState<Template>('balanced');
   const [preset, setPreset] = useState<Preset>('balanced');
@@ -33,9 +35,15 @@ export function PromptInput() {
       return;
     }
 
+    if (selectedProviders.length === 0) {
+      alert('Please select at least one provider');
+      return;
+    }
+
     const config: SessionConfig = {
       prompt: prompt.trim(),
       chair,
+      selected_providers: selectedProviders,
       iterations,
       template,
       preset,
@@ -78,27 +86,16 @@ export function PromptInput() {
             {/* File Upload */}
             <FileUpload files={files} onFilesChange={setFiles} disabled={isStreaming} />
 
-            {/* Main Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Chair Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Chair (Merger)
-                </label>
-                <select
-                  value={chair}
-                  onChange={(e) => setChair(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  disabled={isStreaming}
-                >
-                  {configuredProviders.map((provider) => (
-                    <option key={provider} value={provider}>
-                      {provider.charAt(0).toUpperCase() + provider.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Provider Selection */}
+            <ProviderSelector
+              selectedProviders={selectedProviders}
+              onSelectionChange={setSelectedProviders}
+              chair={chair}
+              onChairChange={setChair}
+            />
 
+            {/* Main Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Iterations */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

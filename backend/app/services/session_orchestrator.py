@@ -63,6 +63,12 @@ class SessionOrchestrator:
         preset_config = PRESET_CONFIGS.get(config.preset, PRESET_CONFIGS["balanced"])
         temperature = preset_config["temperature"]
 
+        # Serialize selected providers to JSON if provided
+        import json
+        selected_providers_json = None
+        if config.selected_providers:
+            selected_providers_json = json.dumps(config.selected_providers)
+
         # Create session record
         session = Session(
             prompt=config.prompt,
@@ -71,6 +77,7 @@ class SessionOrchestrator:
             merge_template=config.template,
             preset=config.preset,
             autopilot=config.autopilot,
+            selected_providers=selected_providers_json,
             status="running",
         )
 
@@ -149,13 +156,32 @@ class SessionOrchestrator:
         self, session: Session
     ) -> AsyncGenerator[dict, None]:
         """Collect initial responses from all configured providers in parallel."""
+        import json
+
         providers = self.provider_factory.get_all_providers()
+        provider_names = self.provider_factory.get_provider_names()
 
         if not providers:
             return
 
-        # Create tasks for all providers with their names
-        provider_names = self.provider_factory.get_provider_names()
+        # Filter providers based on selected_providers if specified
+        if session.selected_providers:
+            selected = json.loads(session.selected_providers)
+            filtered_providers = []
+            filtered_names = []
+            for provider, name in zip(providers, provider_names):
+                if name in selected:
+                    filtered_providers.append(provider)
+                    filtered_names.append(name)
+            providers = filtered_providers
+            provider_names = filtered_names
+
+        if not providers:
+            yield {
+                "type": "error",
+                "message": "No providers selected or available for this session",
+            }
+            return
 
         temperature = self._get_temperature_for_session(session)
 
@@ -226,7 +252,25 @@ class SessionOrchestrator:
         self, session: Session, merged_response: dict, iteration: int
     ) -> AsyncGenerator[dict, None]:
         """Collect feedback from council on the merged response."""
+        import json
+
         providers = self.provider_factory.get_all_providers()
+        provider_names = self.provider_factory.get_provider_names()
+
+        if not providers:
+            return
+
+        # Filter providers based on selected_providers if specified
+        if session.selected_providers:
+            selected = json.loads(session.selected_providers)
+            filtered_providers = []
+            filtered_names = []
+            for provider, name in zip(providers, provider_names):
+                if name in selected:
+                    filtered_providers.append(provider)
+                    filtered_names.append(name)
+            providers = filtered_providers
+            provider_names = filtered_names
 
         if not providers:
             return

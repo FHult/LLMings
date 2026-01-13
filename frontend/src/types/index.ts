@@ -31,6 +31,7 @@ export interface FileAttachment {
 export interface SessionConfig {
   prompt: string;
   chair: string;
+  selected_providers?: string[];
   iterations: number;
   template: 'analytical' | 'creative' | 'technical' | 'balanced';
   preset: 'creative' | 'balanced' | 'precise';

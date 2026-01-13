@@ -30,6 +30,10 @@ class SessionCreate(BaseModel):
     preset: str = Field(default="balanced", description="Response preset (creative/balanced/precise)")
     system_prompt: str | None = Field(default=None, description="Global system prompt")
     autopilot: bool = Field(default=False, description="Enable autopilot mode")
+    selected_providers: list[str] | None = Field(
+        default=None,
+        description="Optional list of providers to include. If not provided, uses all configured providers."
+    )
     model_configs: list[ModelConfig] | None = Field(
         default=None,
         description="Optional model configuration per provider. If not provided, uses defaults."
