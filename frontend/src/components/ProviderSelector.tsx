@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import APIKeyModal from './APIKeyModal';
 
 interface Provider {
   name: string;
@@ -39,6 +40,7 @@ export default function ProviderSelector({
 }: ProviderSelectorProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
+  const [configureProvider, setConfigureProvider] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProviders();
@@ -49,9 +51,12 @@ export default function ProviderSelector({
       const response = await fetch('http://localhost:8000/api/providers');
       const data = await response.json();
 
-      const providerList: Provider[] = Object.keys(data).map((name) => ({
+      // Extract providers object from API response
+      const providersData = data.providers || data;
+
+      const providerList: Provider[] = Object.keys(providersData).map((name) => ({
         name,
-        configured: data[name].configured,
+        configured: providersData[name].configured,
         displayName: PROVIDER_DISPLAY_NAMES[name] || name,
         status: 'unknown',
       }));
@@ -178,11 +183,20 @@ export default function ProviderSelector({
                 {PROVIDER_DESCRIPTIONS[provider.name] || 'AI Provider'}
               </div>
 
-              {!provider.configured && (
-                <div className="provider-status error">
-                  <span className="status-icon">⚠️</span>
-                  Not configured (API key missing)
-                </div>
+              {!provider.configured && provider.name !== 'ollama' && (
+                <>
+                  <div className="provider-status error">
+                    <span className="status-icon">⚠️</span>
+                    Not configured (API key missing)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfigureProvider(provider.name)}
+                    className="btn-configure"
+                  >
+                    🔑 Add API Key
+                  </button>
+                </>
               )}
 
               {provider.configured && isSelected && (
@@ -218,6 +232,26 @@ export default function ProviderSelector({
             </>
           )}
         </div>
+      )}
+
+      {/* API Key Configuration Modal */}
+      {configureProvider && (
+        <APIKeyModal
+          provider={configureProvider}
+          displayName={PROVIDER_DISPLAY_NAMES[configureProvider] || configureProvider}
+          isOpen={true}
+          onClose={() => setConfigureProvider(null)}
+          onSuccess={() => {
+            // Show success message and prompt to restart
+            alert(
+              'API key saved successfully! Please restart the backend server for changes to take effect.\n\n' +
+              'From the backend directory, run:\n' +
+              'source venv/bin/activate && uvicorn app.main:app --reload'
+            );
+            // Refetch providers to update UI
+            fetchProviders();
+          }}
+        />
       )}
 
       <style>{`
@@ -358,6 +392,25 @@ export default function ProviderSelector({
 
         .status-icon {
           font-size: 1rem;
+        }
+
+        .btn-configure {
+          width: 100%;
+          margin-top: 0.75rem;
+          padding: 0.5rem;
+          background: #2a2a2a;
+          border: 1px solid #4a9eff;
+          color: #4a9eff;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+
+        .btn-configure:hover {
+          background: #4a9eff;
+          color: #000;
         }
 
         .btn-chair {
