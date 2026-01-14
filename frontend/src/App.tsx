@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { useSessionStore } from '@/store/sessionStore';
 import { useProvidersStore } from '@/store/providersStore';
 import { sessionApi } from '@/lib/api';
 import { PromptInput } from '@/components/prompt/PromptInput';
 import { LiveSession } from '@/components/session/LiveSession';
 import ProviderSettings from '@/components/ProviderSettings';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 type TabType = 'council' | 'settings';
 
@@ -30,7 +32,32 @@ function App() {
   }, [loadProviders]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <ErrorBoundary>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#fff',
+            color: '#363636',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
@@ -170,7 +197,8 @@ function App() {
           </p>
         </div>
       </footer>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
 

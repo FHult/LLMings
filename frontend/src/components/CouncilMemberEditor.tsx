@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import type { CouncilMember, PersonalityArchetype, Provider } from '../types';
+import { API_URLS } from '../lib/config';
 
 interface CouncilMemberEditorProps {
   members: CouncilMember[];
@@ -53,17 +55,18 @@ export default function CouncilMemberEditor({
 
   const fetchArchetypes = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/archetypes');
+      const response = await fetch(API_URLS.archetypes);
       const data = await response.json();
       setArchetypes(data.archetypes || []);
     } catch (error) {
       console.error('Failed to fetch archetypes:', error);
+      toast.error('Failed to load personality archetypes');
     }
   };
 
   const fetchRAMInfo = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/system/ram-status');
+      const response = await fetch(API_URLS.systemRamStatus);
       if (response.ok) {
         const data = await response.json();
         // Build a map of model name -> RAM info using all_models (not just recommended)
@@ -107,7 +110,7 @@ export default function CouncilMemberEditor({
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/templates');
+      const response = await fetch('API_URLS.templates');
       if (response.ok) {
         const data = await response.json();
         setTemplates(data);
@@ -119,17 +122,17 @@ export default function CouncilMemberEditor({
 
   const saveTemplate = async () => {
     if (!templateName.trim()) {
-      alert('Please enter a template name');
+      toast.error('Please enter a template name');
       return;
     }
 
     if (members.length === 0) {
-      alert('Cannot save empty council');
+      toast.error('Cannot save empty council');
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/templates', {
+      const response = await fetch('API_URLS.templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -144,18 +147,18 @@ export default function CouncilMemberEditor({
         setTemplateDescription('');
         setShowSaveDialog(false);
         fetchTemplates();
-        alert('Template saved successfully!');
+        toast.success('Template saved successfully!');
       }
     } catch (error) {
       console.error('Failed to save template:', error);
-      alert('Failed to save template');
+      toast.error('Failed to save template');
     }
   };
 
   const loadTemplate = (template: CouncilTemplate) => {
     onMembersChange(template.members);
     setShowLoadDialog(false);
-    alert(`Loaded template: ${template.name}`);
+    toast.success(`Loaded template: ${template.name}`);
   };
 
   const deleteTemplate = async (templateId: string, templateName: string) => {
@@ -164,17 +167,17 @@ export default function CouncilMemberEditor({
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/templates/${templateId}`, {
+      const response = await fetch(`API_URLS.templates/${templateId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         fetchTemplates();
-        alert('Template deleted');
+        toast.success('Template deleted');
       }
     } catch (error) {
       console.error('Failed to delete template:', error);
-      alert('Failed to delete template');
+      toast.error('Failed to delete template');
     }
   };
 

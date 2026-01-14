@@ -2,10 +2,12 @@
  * Ollama model management component
  */
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { config } from '@/lib/config';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = `${config.apiBaseUrl}/api`;
 
 interface OllamaStatus {
   running: boolean;

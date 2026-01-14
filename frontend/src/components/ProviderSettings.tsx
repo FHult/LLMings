@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import APIKeyModal from './APIKeyModal';
 import { OllamaManager } from './ollama/OllamaManager';
 import { useProvidersStore } from '@/store/providersStore';
@@ -121,8 +122,14 @@ export default function ProviderSettings() {
 
   const handleModelChange = async () => {
     // Refresh both local state and global store when Ollama models change
-    await fetchProviders();
-    await loadProviders();
+    try {
+      await fetchProviders();
+      await loadProviders();
+      toast.success('Model list updated');
+    } catch (error) {
+      console.error('Failed to refresh providers:', error);
+      toast.error('Failed to refresh model list');
+    }
   };
 
   if (loading) {
