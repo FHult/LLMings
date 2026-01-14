@@ -1,4 +1,5 @@
 """FastAPI application entry point."""
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,23 +8,38 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import session, providers, files, ollama, config, archetypes, system, templates
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
-    print("Initializing database...")
+    logger.info("Starting LLMings API...")
+
+    # Validate and log configuration
+    settings.log_configuration_status()
+
+    # Initialize database
+    logger.info("Initializing database...")
     await init_db()
-    print("Database initialized successfully!")
-    print(f"Configured providers: {settings.configured_providers}")
+    logger.info("Database initialized successfully!")
+
     yield
+
     # Shutdown
-    print("Shutting down...")
+    logger.info("Shutting down...")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="HiveCouncil API",
+    title="LLMings API",
     description="Multi-AI council with consensus building",
     version="0.1.0",
     lifespan=lifespan,
@@ -53,7 +69,7 @@ app.include_router(templates.router, prefix="/api", tags=["templates"])
 async def root():
     """Root endpoint."""
     return {
-        "name": "HiveCouncil API",
+        "name": "LLMings API",
         "version": "0.1.0",
         "status": "running",
         "configured_providers": settings.configured_providers,

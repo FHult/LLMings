@@ -5,14 +5,13 @@ import React, { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { FileAttachment } from '@/types';
+import { API_URLS, VALIDATION } from '@/lib/config';
 
 interface FileUploadProps {
   files: FileAttachment[];
   onFilesChange: (files: FileAttachment[]) => void;
   disabled?: boolean;
 }
-
-const API_BASE_URL = 'http://localhost:8000/api';
 
 export const FileUpload: React.FC<FileUploadProps> = ({ files, onFilesChange, disabled }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,10 +29,17 @@ export const FileUpload: React.FC<FileUploadProps> = ({ files, onFilesChange, di
       const uploadedFiles: FileAttachment[] = [];
 
       for (const file of Array.from(selectedFiles)) {
+        // Client-side file size validation
+        if (file.size > VALIDATION.maxFileSize) {
+          throw new Error(
+            `File "${file.name}" is too large (${formatFileSize(file.size)}). Maximum size is ${VALIDATION.maxFileSizeMB}MB.`
+          );
+        }
+
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${API_BASE_URL}/files/upload`, {
+        const response = await fetch(API_URLS.uploadFile, {
           method: 'POST',
           body: formData,
         });

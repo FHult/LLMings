@@ -1,9 +1,18 @@
 """Ollama provider implementation for local LLM support."""
+import logging
 import httpx
 import psutil
 from typing import AsyncGenerator
 from .base import AIProvider
 from app.core.constants import PRICING, PROVIDER_CONFIGS
+from app.core.exceptions import (
+    AIProviderError,
+    ModelNotFoundError,
+    ConnectionError as ProviderConnectionError,
+    TimeoutError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(AIProvider):
@@ -94,12 +103,16 @@ class OllamaProvider(AIProvider):
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                raise Exception(f"Model '{self.model}' not found in Ollama. Run: ollama pull {self.model}")
-            raise Exception(f"Ollama API error: {str(e)}")
+                raise ModelNotFoundError(self.model, provider="ollama")
+            raise AIProviderError(f"Ollama API error: {str(e)}", provider="ollama")
         except httpx.ConnectError:
-            raise Exception("Cannot connect to Ollama. Make sure Ollama is running (ollama serve)")
+            raise ProviderConnectionError("Cannot connect to Ollama. Make sure Ollama is running (ollama serve)", provider="ollama")
+        except httpx.TimeoutException:
+            raise TimeoutError("Ollama request timed out", provider="ollama")
+        except (ModelNotFoundError, ProviderConnectionError, TimeoutError):
+            raise  # Re-raise our custom exceptions
         except Exception as e:
-            raise Exception(f"Ollama error: {str(e)}")
+            raise AIProviderError(f"Ollama error: {str(e)}", provider="ollama")
 
     def supports_vision(self) -> bool:
         """Check if model supports vision."""
@@ -136,7 +149,7 @@ class OllamaProvider(AIProvider):
 
             return models
         except Exception as e:
-            print(f"Error listing Ollama models: {e}")
+            logger.warning(f"Error listing Ollama models: {e}")
             return []
 
     async def pull_model(self, model_name: str) -> AsyncGenerator[dict, None]:

@@ -38,3 +38,20 @@ export const API_URLS = {
   ollamaRecommended: getApiUrl(`${config.api.ollama}/recommended`),
   uploadFile: getApiUrl(`${config.api.files}/upload`),
 } as const;
+
+// Validation limits (should match backend)
+export const VALIDATION = {
+  // File upload limits
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  maxFileSizeMB: 10,
+
+  // Prompt limits
+  maxPromptLength: 50000, // 50k characters
+  minPromptLength: 1,
+
+  // Session limits
+  maxIterations: 10,
+  minIterations: 1,
+  maxCouncilMembers: 10,
+  minCouncilMembers: 1,
+} as const;

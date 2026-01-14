@@ -1,9 +1,11 @@
 """Provider API routes."""
+import logging
 from fastapi import APIRouter
 
 from app.services.ai_providers import ProviderFactory
 from app.core.constants import PROVIDER_CONFIGS
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -28,7 +30,7 @@ async def get_providers():
             try:
                 available_models = await provider.list_available_models()
             except Exception as e:
-                print(f"Error getting Ollama models: {e}")
+                logger.warning(f"Error getting Ollama models: {e}")
                 available_models = []
 
         providers_info[provider_name] = {

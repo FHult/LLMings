@@ -1,9 +1,12 @@
 """MLX model manager for downloading and converting HuggingFace models."""
+import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import AsyncGenerator
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class MLXModelManager:
@@ -195,9 +198,9 @@ PARAMETER top_p 0.9
                 text=True
             )
         except subprocess.CalledProcessError as e:
-            print(f"Failed to create Ollama model: {e.stderr}")
+            logger.error(f"Failed to create Ollama model: {e.stderr}")
         except FileNotFoundError:
-            print("Ollama CLI not found. Model downloaded but not imported to Ollama.")
+            logger.warning("Ollama CLI not found. Model downloaded but not imported to Ollama.")
 
     async def list_downloaded_models(self) -> list[dict]:
         """List models downloaded to local storage."""
@@ -230,7 +233,7 @@ PARAMETER top_p 0.9
             shutil.rmtree(model_path)
             return True
         except Exception as e:
-            print(f"Failed to delete model: {e}")
+            logger.error(f"Failed to delete model: {e}")
             return False
 
     def list_popular_models(self) -> dict:

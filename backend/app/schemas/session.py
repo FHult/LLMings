@@ -2,6 +2,15 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from app.core.validation import (
+    MAX_PROMPT_LENGTH,
+    MIN_PROMPT_LENGTH,
+    MAX_ITERATIONS,
+    MIN_ITERATIONS,
+    MAX_COUNCIL_MEMBERS,
+    MIN_COUNCIL_MEMBERS,
+)
+
 
 class ModelConfig(BaseModel):
     """Model configuration for each provider."""
@@ -35,9 +44,9 @@ class FileAttachment(BaseModel):
 class SessionCreate(BaseModel):
     """Schema for creating a new session."""
 
-    prompt: str = Field(..., min_length=1, description="The user's prompt")
-    council_members: list[CouncilMember] = Field(..., min_items=1, description="Council members configuration")
-    iterations: int = Field(default=1, ge=1, le=10, description="Number of iterations")
+    prompt: str = Field(..., min_length=MIN_PROMPT_LENGTH, max_length=MAX_PROMPT_LENGTH, description="The user's prompt")
+    council_members: list[CouncilMember] = Field(..., min_length=MIN_COUNCIL_MEMBERS, max_length=MAX_COUNCIL_MEMBERS, description="Council members configuration")
+    iterations: int = Field(default=1, ge=MIN_ITERATIONS, le=MAX_ITERATIONS, description="Number of iterations")
     template: str = Field(default="balanced", description="Merge template style")
     preset: str = Field(default="balanced", description="Response preset (creative/balanced/precise)")
     system_prompt: str | None = Field(default=None, description="Global system prompt (overrides member personalities if provided)")

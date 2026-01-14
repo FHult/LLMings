@@ -1,9 +1,19 @@
 """Anthropic (Claude) provider implementation."""
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, APIError, RateLimitError as AnthropicRateLimitError, AuthenticationError as AnthropicAuthError
 from typing import AsyncGenerator
 
 from .base import AIProvider
 from app.core.constants import PRICING, PROVIDER_CONFIGS
+from app.core.exceptions import (
+    AIProviderError,
+    RateLimitError,
+    AuthenticationError,
+    ModelNotFoundError,
+    ContextLengthError,
+    ContentFilterError,
+    TimeoutError,
+    ServiceUnavailableError,
+)
 
 
 class AnthropicProvider(AIProvider):
@@ -37,8 +47,26 @@ class AnthropicProvider(AIProvider):
                 async for text in stream.text_stream:
                     yield text
 
+        except AnthropicRateLimitError as e:
+            raise RateLimitError(str(e), provider="anthropic")
+        except AnthropicAuthError as e:
+            raise AuthenticationError(str(e), provider="anthropic")
+        except APIError as e:
+            error_message = str(e).lower()
+            if "model" in error_message and "not found" in error_message:
+                raise ModelNotFoundError(self.model, provider="anthropic")
+            elif "context" in error_message or "too long" in error_message:
+                raise ContextLengthError(str(e), provider="anthropic")
+            elif "content" in error_message and ("blocked" in error_message or "filter" in error_message):
+                raise ContentFilterError(str(e), provider="anthropic")
+            elif "timeout" in error_message:
+                raise TimeoutError(str(e), provider="anthropic")
+            elif "overloaded" in error_message or "unavailable" in error_message:
+                raise ServiceUnavailableError(str(e), provider="anthropic")
+            else:
+                raise AIProviderError(f"Anthropic API error: {str(e)}", provider="anthropic")
         except Exception as e:
-            raise Exception(f"Anthropic API error: {str(e)}")
+            raise AIProviderError(f"Anthropic error: {str(e)}", provider="anthropic")
 
     def count_tokens(self, text: str) -> int:
         """

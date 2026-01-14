@@ -2,6 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.services.file_processor import FileProcessor
 from app.schemas.session import FileAttachment
+from app.core.validation import MAX_FILE_SIZE, MAX_FILE_SIZE_MB
 
 router = APIRouter()
 
@@ -17,17 +18,15 @@ async def upload_file(file: UploadFile = File(...)):
     Returns:
         FileAttachment: Processed file information with extracted content
     """
-    # Check file size (10MB limit)
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
     # Read file content
     content = await file.read()
     file_size = len(content)
 
+    # Check file size
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)}MB"
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE_MB}MB"
         )
 
     # Check if file type is supported

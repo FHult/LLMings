@@ -1,10 +1,20 @@
 """OpenAI provider implementation."""
 # import tiktoken  # Temporarily disabled - use fallback token counting
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIError, RateLimitError as OpenAIRateLimitError, AuthenticationError as OpenAIAuthError
 from typing import AsyncGenerator
 
 from .base import AIProvider
 from app.core.constants import PRICING, PROVIDER_CONFIGS
+from app.core.exceptions import (
+    AIProviderError,
+    RateLimitError,
+    AuthenticationError,
+    ModelNotFoundError,
+    ContextLengthError,
+    ContentFilterError,
+    TimeoutError,
+    ServiceUnavailableError,
+)
 
 
 class OpenAIProvider(AIProvider):
@@ -63,8 +73,27 @@ class OpenAIProvider(AIProvider):
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
+        except OpenAIRateLimitError as e:
+            raise RateLimitError(str(e), provider="openai")
+        except OpenAIAuthError as e:
+            raise AuthenticationError(str(e), provider="openai")
+        except APIError as e:
+            # Parse specific error types from the API error
+            error_message = str(e).lower()
+            if "model" in error_message and ("not found" in error_message or "does not exist" in error_message):
+                raise ModelNotFoundError(self.model, provider="openai")
+            elif "context_length" in error_message or "maximum context" in error_message:
+                raise ContextLengthError(str(e), provider="openai")
+            elif "content_filter" in error_message or "content_policy" in error_message:
+                raise ContentFilterError(str(e), provider="openai")
+            elif "timeout" in error_message:
+                raise TimeoutError(str(e), provider="openai")
+            elif "service" in error_message and "unavailable" in error_message:
+                raise ServiceUnavailableError(str(e), provider="openai")
+            else:
+                raise AIProviderError(f"OpenAI API error: {str(e)}", provider="openai")
         except Exception as e:
-            raise Exception(f"OpenAI API error: {str(e)}")
+            raise AIProviderError(f"OpenAI error: {str(e)}", provider="openai")
 
     def supports_vision(self) -> bool:
         """Check if model supports vision."""

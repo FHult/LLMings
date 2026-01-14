@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import { useSessionStore } from '@/store/sessionStore';
 import { useProvidersStore } from '@/store/providersStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileUpload } from './FileUpload';
 import CouncilMemberEditor from '@/components/CouncilMemberEditor';
+import { VALIDATION } from '@/lib/config';
 import type { SessionConfig, Preset, FileAttachment, CouncilMember } from '@/types';
 
 export function PromptInput() {
@@ -21,12 +23,27 @@ export function PromptInput() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!prompt.trim()) {
+    const trimmedPrompt = prompt.trim();
+
+    // Validate prompt
+    if (!trimmedPrompt) {
+      toast.error('Please enter a prompt');
       return;
     }
 
+    if (trimmedPrompt.length > VALIDATION.maxPromptLength) {
+      toast.error(`Prompt is too long (${trimmedPrompt.length.toLocaleString()} characters). Maximum is ${VALIDATION.maxPromptLength.toLocaleString()} characters.`);
+      return;
+    }
+
+    // Validate council members
     if (councilMembers.length === 0) {
-      alert('Please add at least one council member');
+      toast.error('Please add at least one council member');
+      return;
+    }
+
+    if (councilMembers.length > VALIDATION.maxCouncilMembers) {
+      toast.error(`Too many council members. Maximum is ${VALIDATION.maxCouncilMembers}.`);
       return;
     }
 
@@ -66,9 +83,15 @@ export function PromptInput() {
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Ask your question or describe what you'd like the AI council to discuss..."
                 rows={4}
+                maxLength={VALIDATION.maxPromptLength}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 disabled={isStreaming}
               />
+              <div className="flex justify-end mt-1">
+                <span className={`text-xs ${prompt.length > VALIDATION.maxPromptLength * 0.9 ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {prompt.length.toLocaleString()} / {VALIDATION.maxPromptLength.toLocaleString()}
+                </span>
+              </div>
             </div>
 
             {/* File Upload */}
