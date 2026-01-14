@@ -30,6 +30,12 @@ interface ModelRAMInfo {
   };
 }
 
+interface ModelData {
+  name: string;
+  ram_required: number;
+  can_run: boolean;
+}
+
 interface CouncilTemplate {
   id: string;
   name: string;
@@ -58,8 +64,7 @@ export default function CouncilMemberEditor({
       const response = await fetch(API_URLS.archetypes);
       const data = await response.json();
       setArchetypes(data.archetypes || []);
-    } catch (error) {
-      console.error('Failed to fetch archetypes:', error);
+    } catch {
       toast.error('Failed to load personality archetypes');
     }
   };
@@ -71,7 +76,7 @@ export default function CouncilMemberEditor({
         const data = await response.json();
         // Build a map of model name -> RAM info using all_models (not just recommended)
         const ramMap: ModelRAMInfo = {};
-        data.all_models?.forEach((model: any) => {
+        data.all_models?.forEach((model: ModelData) => {
           ramMap[model.name] = {
             ram_required: model.ram_required,
             can_run: model.can_run,
@@ -79,8 +84,8 @@ export default function CouncilMemberEditor({
         });
         setModelRAMInfo(ramMap);
       }
-    } catch (error) {
-      console.error('Failed to fetch RAM info:', error);
+    } catch {
+      // Silently fail - RAM info is optional
     }
   };
 
@@ -115,8 +120,8 @@ export default function CouncilMemberEditor({
         const data = await response.json();
         setTemplates(data);
       }
-    } catch (error) {
-      console.error('Failed to fetch templates:', error);
+    } catch {
+      // Silently fail - templates are optional
     }
   };
 
@@ -149,8 +154,7 @@ export default function CouncilMemberEditor({
         fetchTemplates();
         toast.success('Template saved successfully!');
       }
-    } catch (error) {
-      console.error('Failed to save template:', error);
+    } catch {
       toast.error('Failed to save template');
     }
   };
@@ -175,8 +179,7 @@ export default function CouncilMemberEditor({
         fetchTemplates();
         toast.success('Template deleted');
       }
-    } catch (error) {
-      console.error('Failed to delete template:', error);
+    } catch {
       toast.error('Failed to delete template');
     }
   };

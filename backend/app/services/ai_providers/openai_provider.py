@@ -1,7 +1,13 @@
 """OpenAI provider implementation."""
-# import tiktoken  # Temporarily disabled - use fallback token counting
+import logging
 from openai import AsyncOpenAI, APIError, RateLimitError as OpenAIRateLimitError, AuthenticationError as OpenAIAuthError
 from typing import AsyncGenerator
+
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
 
 from .base import AIProvider
 from app.core.constants import PRICING, PROVIDER_CONFIGS
@@ -16,6 +22,8 @@ from app.core.exceptions import (
     ServiceUnavailableError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class OpenAIProvider(AIProvider):
     """OpenAI API provider."""
@@ -25,9 +33,18 @@ class OpenAIProvider(AIProvider):
         super().__init__(api_key, model)
         self.client = AsyncOpenAI(api_key=api_key)
         self.name = "openai"
+        self._tokenizer = None
 
-        # Tokenizer temporarily disabled - using fallback estimation
-        # TODO: Re-enable tiktoken once Python 3.13 support is stable
+        # Initialize tokenizer if tiktoken is available
+        if TIKTOKEN_AVAILABLE:
+            try:
+                self._tokenizer = tiktoken.encoding_for_model(self.model)
+            except KeyError:
+                # Model not found, try cl100k_base (works for most modern models)
+                try:
+                    self._tokenizer = tiktoken.get_encoding("cl100k_base")
+                except Exception as e:
+                    logger.warning(f"Could not initialize tiktoken: {e}")
 
     async def stream_completion(
         self,
@@ -102,9 +119,13 @@ class OpenAIProvider(AIProvider):
         return self.model in vision_models
 
     def count_tokens(self, text: str) -> int:
-        """Count tokens using fallback estimation."""
+        """Count tokens using tiktoken if available, otherwise fallback estimation."""
+        if self._tokenizer:
+            try:
+                return len(self._tokenizer.encode(text))
+            except Exception:
+                pass
         # Fallback: rough estimate (4 chars per token)
-        # TODO: Re-enable tiktoken for accurate counting
         return len(text) // 4
 
     def get_default_model(self) -> str:

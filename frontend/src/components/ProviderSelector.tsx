@@ -96,8 +96,8 @@ export default function ProviderSelector({
           onChairChange(defaultChair);
         }
       }
-    } catch (error) {
-      console.error('Failed to fetch providers:', error);
+    } catch {
+      // Provider fetch failed - will show loading state
     } finally {
       setLoading(false);
     }

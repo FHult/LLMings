@@ -54,11 +54,6 @@ export interface SessionConfig {
   system_prompt?: string;
   autopilot: boolean;
   files?: FileAttachment[];
-
-  // Legacy fields for backward compatibility
-  chair?: string;
-  selected_providers?: string[];
-  model_configs?: ModelConfig[];
 }
 
 export interface SessionResponse {

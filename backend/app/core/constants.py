@@ -1,4 +1,44 @@
 """Application constants including pricing and model configurations."""
+from enum import Enum
+
+
+class ProviderName(str, Enum):
+    """Supported AI providers."""
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    GROK = "grok"
+    OLLAMA = "ollama"
+
+
+class SessionStatus(str, Enum):
+    """Session status values."""
+    PENDING = "pending"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ResponseRole(str, Enum):
+    """Response role types."""
+    COUNCIL = "council"
+    CHAIR = "chair"
+
+
+class StreamEventType(str, Enum):
+    """SSE stream event types."""
+    ITERATION_START = "iteration_start"
+    RESPONSE_START = "response_start"
+    RESPONSE_CHUNK = "response_chunk"
+    RESPONSE_END = "response_end"
+    RESPONSE_ERROR = "response_error"
+    CONSENSUS_START = "consensus_start"
+    CONSENSUS_CHUNK = "consensus_chunk"
+    CONSENSUS_END = "consensus_end"
+    ITERATION_END = "iteration_end"
+    SESSION_COMPLETE = "session_complete"
+
 
 # AI Provider Configurations
 PROVIDER_CONFIGS = {

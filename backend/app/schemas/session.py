@@ -1,6 +1,6 @@
 """Session schemas."""
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.validation import (
     MAX_PROMPT_LENGTH,
@@ -49,7 +49,7 @@ class SessionCreate(BaseModel):
     iterations: int = Field(default=1, ge=MIN_ITERATIONS, le=MAX_ITERATIONS, description="Number of iterations")
     template: str = Field(default="balanced", description="Merge template style")
     preset: str = Field(default="balanced", description="Response preset (creative/balanced/precise)")
-    system_prompt: str | None = Field(default=None, description="Global system prompt (overrides member personalities if provided)")
+    system_prompt: str | None = Field(default=None, max_length=MAX_PROMPT_LENGTH, description="Global system prompt (overrides member personalities if provided)")
     autopilot: bool = Field(default=False, description="Enable autopilot mode")
     files: list[FileAttachment] | None = Field(
         default=None,
@@ -60,10 +60,16 @@ class SessionCreate(BaseModel):
         description="State data for resuming a paused session"
     )
 
-    # Legacy fields for backward compatibility
-    chair: str | None = Field(default=None, description="[Deprecated] Use council_members instead")
-    selected_providers: list[str] | None = Field(default=None, description="[Deprecated] Use council_members instead")
-    model_configs: list[ModelConfig] | None = Field(default=None, description="[Deprecated] Use council_members instead")
+    @model_validator(mode="after")
+    def validate_chair_member(self) -> "SessionCreate":
+        """Validate that exactly one council member is marked as chair."""
+        if self.council_members:
+            chair_count = sum(1 for m in self.council_members if m.is_chair)
+            if chair_count == 0:
+                raise ValueError("At least one council member must be designated as chair (is_chair=True)")
+            if chair_count > 1:
+                raise ValueError(f"Only one council member can be chair, but {chair_count} are marked as chair")
+        return self
 
 
 class SessionResponse(BaseModel):

@@ -91,8 +91,8 @@ export default function ProviderSettings() {
         const data = await response.json();
         setRamStatus(data);
       }
-    } catch (error) {
-      console.error('Failed to fetch RAM status:', error);
+    } catch {
+      // RAM status fetch failed - not critical
     } finally {
       setRamLoading(false);
     }
@@ -113,8 +113,8 @@ export default function ProviderSettings() {
       }));
 
       setProviders(providerList);
-    } catch (error) {
-      console.error('Failed to fetch providers:', error);
+    } catch {
+      // Provider fetch failed - will show loading state
     } finally {
       setLoading(false);
     }
@@ -126,8 +126,7 @@ export default function ProviderSettings() {
       await fetchProviders();
       await loadProviders();
       toast.success('Model list updated');
-    } catch (error) {
-      console.error('Failed to refresh providers:', error);
+    } catch {
       toast.error('Failed to refresh model list');
     }
   };

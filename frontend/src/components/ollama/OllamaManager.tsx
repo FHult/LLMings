@@ -51,8 +51,7 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
       const response = await fetch(`${API_BASE_URL}/ollama/status`);
       const data = await response.json();
       setStatus(data);
-    } catch (error) {
-      console.error('Failed to fetch Ollama status:', error);
+    } catch {
       setStatus({ running: false, error: 'Failed to connect to backend' });
     }
   };
@@ -62,8 +61,8 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
       const response = await fetch(`${API_BASE_URL}/ollama/models`);
       const data = await response.json();
       setInstalledModels(data.models || []);
-    } catch (error) {
-      console.error('Failed to fetch installed models:', error);
+    } catch {
+      // Failed to fetch models - not critical
     }
   };
 
@@ -72,8 +71,8 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
       const response = await fetch(`${API_BASE_URL}/ollama/recommended`);
       const data = await response.json();
       setRecommendedModels(data.recommended || []);
-    } catch (error) {
-      console.error('Failed to fetch recommended models:', error);
+    } catch {
+      // Failed to fetch recommendations - not critical
     }
   };
 
@@ -153,8 +152,8 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
       await fetchInstalledModels();
       // Notify parent that models have changed
       onModelChange?.();
-    } catch (error) {
-      console.error('Failed to delete model:', error);
+    } catch {
+      toast.error('Failed to delete model');
     }
   };
 

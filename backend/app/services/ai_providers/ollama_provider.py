@@ -47,7 +47,7 @@ class OllamaProvider(AIProvider):
         super().__init__(api_key, model)
         self.base_url = base_url
         self.name = "ollama"
-        self.client = httpx.AsyncClient(timeout=300.0)
+        self.client = httpx.AsyncClient(timeout=60.0)  # 60 second timeout for local models
 
     async def stream_completion(
         self,

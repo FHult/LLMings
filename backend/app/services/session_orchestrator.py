@@ -8,11 +8,15 @@ Coordinates the entire council session flow:
 """
 
 import asyncio
+import logging
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.session import Session
+
+logger = logging.getLogger(__name__)
+
 from app.models.response import Response
 from app.schemas.session import SessionCreate
 from app.services.ai_providers.provider_factory import ProviderFactory
@@ -516,7 +520,8 @@ Please provide constructive feedback on this output. What could be improved? Wha
                         session.prompt, temperature, system_prompt
                     ))
         else:
-            # Legacy provider system (backward compatibility)
+            # Legacy provider system (backward compatibility) - DEPRECATED
+            logger.warning("Using deprecated legacy provider system. Please migrate to council_members.")
             for provider, name in zip(providers, provider_names):
                 legacy_model = getattr(provider, 'model', None)
                 tasks.append(get_response_with_name(
@@ -681,7 +686,8 @@ Provide constructive feedback on:
 
             return
 
-        # Legacy provider system fallback
+        # Legacy provider system fallback - DEPRECATED
+        logger.warning("Using deprecated legacy provider system for feedback. Please migrate to council_members.")
         providers = self.provider_factory.get_all_providers()
         provider_names = self.provider_factory.get_provider_names()
 

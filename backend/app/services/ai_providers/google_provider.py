@@ -1,9 +1,19 @@
 """Google (Gemini) provider implementation."""
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from typing import AsyncGenerator
 
 from .base import AIProvider
 from app.core.constants import PRICING, PROVIDER_CONFIGS
+from app.core.exceptions import (
+    AIProviderError,
+    RateLimitError,
+    AuthenticationError,
+    ModelNotFoundError,
+    ContextLengthError,
+    ContentFilterError,
+    ServiceUnavailableError,
+)
 
 
 class GoogleProvider(AIProvider):
@@ -49,8 +59,26 @@ class GoogleProvider(AIProvider):
                 if chunk.text:
                     yield chunk.text
 
+        except google_exceptions.ResourceExhausted as e:
+            raise RateLimitError(str(e), provider="google")
+        except google_exceptions.Unauthenticated as e:
+            raise AuthenticationError(str(e), provider="google")
+        except google_exceptions.PermissionDenied as e:
+            raise AuthenticationError(str(e), provider="google")
+        except google_exceptions.NotFound as e:
+            raise ModelNotFoundError(self.model, provider="google")
+        except google_exceptions.InvalidArgument as e:
+            error_msg = str(e).lower()
+            if "token" in error_msg or "length" in error_msg or "too long" in error_msg:
+                raise ContextLengthError(str(e), provider="google")
+            raise AIProviderError(f"Google API error: {str(e)}", provider="google")
+        except google_exceptions.ServiceUnavailable as e:
+            raise ServiceUnavailableError(str(e), provider="google")
         except Exception as e:
-            raise Exception(f"Google API error: {str(e)}")
+            error_msg = str(e).lower()
+            if "safety" in error_msg or "blocked" in error_msg:
+                raise ContentFilterError(str(e), provider="google")
+            raise AIProviderError(f"Google API error: {str(e)}", provider="google")
 
     def count_tokens(self, text: str) -> int:
         """
