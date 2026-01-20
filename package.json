@@ -6,7 +6,8 @@
     "setup": "npm run setup:backend && npm run setup:frontend",
     "setup:backend": "cd backend && python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt",
     "setup:frontend": "cd frontend && npm install",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently \"npm run dev:ollama\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:ollama": "ollama serve 2>/dev/null || true",
     "dev:backend": "cd backend && . venv/bin/activate && uvicorn app.main:app --reload --port 8000",
     "dev:frontend": "cd frontend && npm run dev",
     "start": "npm run dev"

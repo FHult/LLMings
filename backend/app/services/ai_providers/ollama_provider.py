@@ -22,25 +22,67 @@ class OllamaProvider(AIProvider):
     # Model RAM requirements (in GB) - approximate minimums
     MODEL_RAM_REQUIREMENTS = {
         # Small models (good for 8GB RAM)
-        "phi3": 4, "phi3:mini": 2, "gemma": 4, "qwen2": 4,
+        "phi3": 4, "phi3:mini": 2, "phi4-mini": 4, "gemma": 4, "gemma3": 5,
+        "qwen2": 4, "qwen2.5": 5, "qwen3": 5, "smollm2": 2,
         # Medium models (good for 16GB RAM)
-        "llama3.1": 8, "llama3": 8, "mistral": 7, "mistral-nemo": 12,
-        "gemma2": 9, "qwen2:7b": 7, "codellama": 7,
+        "llama3.1": 8, "llama3.2": 8, "llama3.3": 8, "llama3": 8,
+        "mistral": 7, "mistral-nemo": 12, "mistral-small": 14,
+        "gemma2": 9, "gemma2:9b": 9, "gemma3:12b": 12,
+        "qwen2:7b": 7, "qwen2.5:7b": 7, "qwen3:8b": 8,
+        "codellama": 7, "deepseek-coder": 8, "deepseek-coder-v2": 10,
+        "starcoder2": 8, "codegemma": 9,
+        # Coding-focused models
+        "qwen3-coder": 10, "qwen2.5-coder": 8, "qwen2.5-coder:7b": 7,
+        "devstral": 14,
         # Large models (need 32GB+ RAM)
-        "llama3.1:70b": 48, "phi3:medium": 16, "gemma2:27b": 24,
+        "llama3.1:70b": 48, "llama3.3:70b": 48,
+        "phi3:medium": 16, "phi4": 16,
+        "gemma2:27b": 24, "gemma3:27b": 24,
+        "qwen2.5:32b": 24, "qwen3:32b": 24,
+        "mistral-large": 48, "mixtral": 32,
+        "deepseek-v3": 48, "deepseek-r1": 48,
+        # Cloud/API models (minimal local RAM - inference via API)
+        "glm-4.7:cloud": 2, "minimax-m2.1:cloud": 2,
         # Vision models
-        "llava": 8, "llava-phi3": 6,
+        "llava": 8, "llava-phi3": 6, "llava-llama3": 8,
+        "llama3.2-vision": 12, "moondream": 4,
     }
 
     # Model suitability ratings (1-10 scale)
     MODEL_SUITABILITY = {
+        # Latest flagship models
+        "llama3.3": {"general": 9, "coding": 9, "reasoning": 9, "creative": 8},
+        "llama3.2": {"general": 9, "coding": 8, "reasoning": 9, "creative": 8},
         "llama3.1": {"general": 9, "coding": 8, "reasoning": 9, "creative": 8},
-        "mistral": {"general": 8, "coding": 9, "reasoning": 9, "creative": 7},
-        "phi3": {"general": 7, "coding": 8, "reasoning": 7, "creative": 6},
+        "gemma3": {"general": 9, "coding": 8, "reasoning": 9, "creative": 8},
         "gemma2": {"general": 8, "coding": 7, "reasoning": 8, "creative": 8},
-        "qwen2:7b": {"general": 8, "coding": 8, "reasoning": 8, "creative": 7},
-        "codellama": {"general": 6, "coding": 10, "reasoning": 7, "creative": 5},
+        "qwen3": {"general": 9, "coding": 9, "reasoning": 9, "creative": 8},
+        "qwen2.5": {"general": 8, "coding": 8, "reasoning": 8, "creative": 7},
+        "phi4": {"general": 8, "coding": 9, "reasoning": 9, "creative": 7},
+        "phi4-mini": {"general": 7, "coding": 8, "reasoning": 8, "creative": 6},
+        # Coding specialists
+        "qwen3-coder": {"general": 7, "coding": 10, "reasoning": 8, "creative": 5},
+        "qwen2.5-coder": {"general": 7, "coding": 10, "reasoning": 8, "creative": 5},
+        "deepseek-coder-v2": {"general": 7, "coding": 10, "reasoning": 8, "creative": 5},
+        "deepseek-coder": {"general": 6, "coding": 9, "reasoning": 7, "creative": 4},
+        "codellama": {"general": 6, "coding": 9, "reasoning": 7, "creative": 5},
+        "starcoder2": {"general": 5, "coding": 9, "reasoning": 6, "creative": 4},
+        "codegemma": {"general": 6, "coding": 9, "reasoning": 7, "creative": 5},
+        "devstral": {"general": 7, "coding": 10, "reasoning": 8, "creative": 5},
+        # Reasoning models
+        "deepseek-r1": {"general": 9, "coding": 9, "reasoning": 10, "creative": 7},
+        "deepseek-v3": {"general": 9, "coding": 9, "reasoning": 9, "creative": 8},
+        # General models
+        "mistral": {"general": 8, "coding": 8, "reasoning": 8, "creative": 7},
+        "mistral-nemo": {"general": 8, "coding": 8, "reasoning": 8, "creative": 7},
+        "mistral-small": {"general": 8, "coding": 8, "reasoning": 8, "creative": 7},
+        "phi3": {"general": 7, "coding": 8, "reasoning": 7, "creative": 6},
+        # Cloud models (via Ollama API compatibility)
+        "glm-4.7:cloud": {"general": 9, "coding": 9, "reasoning": 9, "creative": 8},
+        "minimax-m2.1:cloud": {"general": 9, "coding": 8, "reasoning": 9, "creative": 9},
+        # Vision models
         "llava": {"general": 7, "coding": 5, "reasoning": 6, "creative": 6},
+        "llama3.2-vision": {"general": 8, "coding": 6, "reasoning": 7, "creative": 7},
     }
 
     def __init__(self, api_key: str = "not-needed", model: str | None = None, base_url: str | None = None):

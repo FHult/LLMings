@@ -43,6 +43,7 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
   const [recommendedModels, setRecommendedModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [pullStatus, setPullStatus] = useState<Record<string, string>>({});
+  const [customModelName, setCustomModelName] = useState('');
 
   const fetchStatus = async () => {
     try {
@@ -214,17 +215,35 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
             <h3 className="font-semibold">Ollama Status</h3>
             <p className="text-sm text-muted-foreground">Version: {status.version}</p>
           </div>
-          <div className="text-right">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Running</span>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setLoading(true);
+                await Promise.all([
+                  fetchStatus(),
+                  fetchInstalledModels(),
+                  fetchRecommendedModels(),
+                ]);
+                setLoading(false);
+                toast.success('Model list refreshed');
+              }}
+            >
+              Refresh
+            </Button>
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-sm font-medium">Running</span>
+              </div>
+              {status.system_ram && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  RAM: {status.system_ram.available_gb.toFixed(1)} GB / {status.system_ram.total_gb.toFixed(1)} GB
+                  available
+                </p>
+              )}
             </div>
-            {status.system_ram && (
-              <p className="text-xs text-muted-foreground mt-1">
-                RAM: {status.system_ram.available_gb.toFixed(1)} GB / {status.system_ram.total_gb.toFixed(1)} GB
-                available
-              </p>
-            )}
           </div>
         </div>
       </Card>
@@ -273,6 +292,50 @@ export const OllamaManager: React.FC<OllamaManagerProps> = ({ onModelChange }) =
           </div>
         </div>
       )}
+
+      {/* Install Custom Model */}
+      <Card className="p-4">
+        <h3 className="font-semibold mb-3">Install Model from Ollama Library</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          Enter any model name from{' '}
+          <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+            ollama.com/library
+          </a>
+          {' '}(e.g., glm-4.7:cloud, qwen3-coder, deepseek-r1)
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={customModelName}
+            onChange={(e) => setCustomModelName(e.target.value)}
+            placeholder="Model name (e.g., qwen3-coder)"
+            className="flex-1 px-3 py-2 border rounded-md text-sm"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && customModelName.trim()) {
+                handlePullModel(customModelName.trim());
+                setCustomModelName('');
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => {
+              if (customModelName.trim()) {
+                handlePullModel(customModelName.trim());
+                setCustomModelName('');
+              }
+            }}
+            disabled={!customModelName.trim() || !!pullStatus[customModelName.trim()]}
+          >
+            {pullStatus[customModelName.trim()] || 'Install'}
+          </Button>
+        </div>
+        {pullStatus[customModelName.trim()] && (
+          <p className="text-sm text-muted-foreground mt-2">
+            Status: {pullStatus[customModelName.trim()]}
+          </p>
+        )}
+      </Card>
 
       {/* Recommended Models */}
       {recommendedModels.length > 0 && (
