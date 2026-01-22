@@ -80,3 +80,12 @@ alembic/versions/*.pyc
 .cache/
 temp/
 tmp/
+
+# Release archives
+*.tar.gz
+*.zip
+
+# Install directory runtime files
+install/venv/
+install/.deps_installed
+install/.env
