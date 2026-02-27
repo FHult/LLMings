@@ -1,9 +1,9 @@
 /**
  * ResponseCard component for displaying individual AI responses
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import type { CouncilResponse } from '@/types';
+import type { CouncilResponse, ConsensusStructure } from '@/types';
 import ReactMarkdown from 'react-markdown';
 
 interface ResponseCardProps {
@@ -24,6 +24,80 @@ const providerNames: Record<string, string> = {
   google: 'Gemini',
   grok: 'Grok',
 };
+
+function ConfidenceBadge({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  const color =
+    pct >= 80 ? 'bg-green-100 text-green-700' :
+    pct >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700';
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>
+      {pct}% confidence
+    </span>
+  );
+}
+
+function ConsensusPanel({ structure }: { structure: ConsensusStructure }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-4 border-t pt-3 space-y-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="text-primary">{open ? '▾' : '▸'}</span>
+        Council analysis
+        <ConfidenceBadge value={structure.confidence} />
+      </button>
+
+      {open && (
+        <div className="space-y-3 text-sm">
+          {structure.key_agreements.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">
+                Agreements
+              </p>
+              <ul className="space-y-0.5">
+                {structure.key_agreements.map((a, i) => (
+                  <li key={i} className="flex gap-1.5 text-muted-foreground">
+                    <span className="text-green-500 shrink-0">✓</span>
+                    {a}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {structure.key_disagreements.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+                Disagreements
+              </p>
+              <ul className="space-y-0.5">
+                {structure.key_disagreements.map((d, i) => (
+                  <li key={i} className="flex gap-1.5 text-muted-foreground">
+                    <span className="text-amber-500 shrink-0">△</span>
+                    {d}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {structure.reasoning && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                Chair reasoning
+              </p>
+              <p className="text-muted-foreground italic">{structure.reasoning}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const ResponseCard: React.FC<ResponseCardProps> = ({ response, isMerged = false }) => {
   const colorClass = providerColors[response.provider] || 'bg-gray-100 text-gray-800 border-gray-300';
@@ -61,6 +135,10 @@ export const ResponseCard: React.FC<ResponseCardProps> = ({ response, isMerged =
       <div className="prose prose-sm max-w-none">
         <ReactMarkdown>{response.content}</ReactMarkdown>
       </div>
+
+      {isMerged && response.structure && (
+        <ConsensusPanel structure={response.structure} />
+      )}
     </Card>
   );
 };

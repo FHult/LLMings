@@ -27,11 +27,12 @@ async def get_ollama_status():
         status = await provider.check_ollama_status()
 
         if status["running"]:
-            # Add system RAM info
+            # Add system RAM and GPU info
             status["system_ram"] = {
                 "total_gb": provider.get_total_system_ram(),
                 "available_gb": provider.check_system_ram(),
             }
+            status["gpu"] = provider.get_gpu_info()
 
         return status
 

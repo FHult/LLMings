@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from app.models.response import Response
 from app.schemas.session import SessionCreate
+from app.schemas.consensus import ConsensusOutput
 from app.services.ai_providers.provider_factory import ProviderFactory
 from app.core.constants import MERGE_TEMPLATES, PRESET_CONFIGS
 
@@ -54,8 +55,9 @@ class SessionOrchestrator:
         if model_configs:
             self.provider_factory = ProviderFactory(model_configs=model_configs)
 
-        # Store personality system prompts for each member
+        # Store personality system prompts and think flags for each member
         self.member_personalities = {}
+        self.member_thinking: dict[str, bool] = {}
         for member in config.council_members:
             # Generate system prompt from archetype + custom personality
             personality_prompt = get_archetype_system_prompt(
@@ -63,6 +65,7 @@ class SessionOrchestrator:
                 member.custom_personality
             )
             self.member_personalities[member.id] = personality_prompt
+            self.member_thinking[member.id] = getattr(member, "enable_thinking", False)
 
         # Process file attachments
         if config.files:
@@ -298,9 +301,9 @@ class SessionOrchestrator:
         temperature = self._get_temperature_for_session(session)
 
         # Create wrapper coroutines
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt):
+        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
             try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model)
+                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
                 return name, member_model, member_id, result, None
             except Exception as e:
                 return name, None, member_id, None, e
@@ -313,7 +316,8 @@ class SessionOrchestrator:
                 system_prompt = self.member_personalities.get(member.id)
                 tasks.append(get_response_with_name(
                     provider, member.provider, member.id, member.model,
-                    session.prompt, temperature, system_prompt
+                    session.prompt, temperature, system_prompt,
+                    think=self.member_thinking.get(member.id, False),
                 ))
 
         # Run in parallel and yield results as they complete
@@ -391,9 +395,9 @@ Previous output (iteration {iteration - 1}):
 Please provide constructive feedback on this output. What could be improved? What's working well? What's missing?"""
 
         # Create wrapper coroutines
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt):
+        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
             try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model)
+                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
                 return name, member_model, member_id, result, None
             except Exception as e:
                 return name, None, member_id, None, e
@@ -406,7 +410,8 @@ Please provide constructive feedback on this output. What could be improved? Wha
                 system_prompt = self.member_personalities.get(member.id)
                 tasks.append(get_response_with_name(
                     provider, member.provider, member.id, member.model,
-                    feedback_prompt, temperature, system_prompt
+                    feedback_prompt, temperature, system_prompt,
+                    think=self.member_thinking.get(member.id, False),
                 ))
 
         # Run in parallel and yield results as they complete
@@ -480,9 +485,9 @@ Please provide constructive feedback on this output. What could be improved? Wha
         temperature = self._get_temperature_for_session(session)
 
         # Create wrapper coroutines that return provider name, model, and member info with result
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt):
+        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
             try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model)
+                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
                 return name, member_model, member_id, result, None
             except Exception as e:
                 return name, None, member_id, None, e
@@ -495,7 +500,8 @@ Please provide constructive feedback on this output. What could be improved? Wha
                 system_prompt = self.member_personalities.get(member.id)
                 tasks.append(get_response_with_name(
                     provider, member.provider, member.id, member.model,
-                    session.prompt, temperature, system_prompt
+                    session.prompt, temperature, system_prompt,
+                    think=self.member_thinking.get(member.id, False),
                 ))
 
         # Run all council members in parallel and yield results as they complete
@@ -565,9 +571,9 @@ Please provide constructive feedback on this output. What could be improved? Wha
             return
 
         # Create wrapper coroutines that return member info with result
-        async def get_feedback_with_member(provider, member_id, member_role, member_model, prompt, temp, system_prompt):
+        async def get_feedback_with_member(provider, member_id, member_role, member_model, prompt, temp, system_prompt, think=False):
             try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model)
+                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
                 return member_id, member_role, member_model, result, None
             except Exception as e:
                 return member_id, member_role, None, None, e
@@ -597,7 +603,8 @@ Provide constructive feedback on:
 
                 tasks.append(get_feedback_with_member(
                     provider, member.id, member.role, member.model,
-                    feedback_prompt, temperature, system_prompt
+                    feedback_prompt, temperature, system_prompt,
+                    think=self.member_thinking.get(member.id, False),
                 ))
 
         # Run all members in parallel
@@ -726,12 +733,60 @@ Begin your response with the actual deliverable content immediately."""
         # Get chair's merged response with their personality
         temperature = self._get_temperature_for_session(session)
 
-        try:
-            content, input_tokens, output_tokens, cost = await self._get_provider_response(
-                chair_provider, merge_prompt, temperature, chair_system_prompt, model=chair_model
-            )
+        # Apply file context to merge prompt (mirrors _get_provider_response behaviour)
+        full_merge_prompt = merge_prompt
+        if self.file_context:
+            full_merge_prompt = f"{self.file_context}\n\n{merge_prompt}"
 
-            # Save to database (use chair_model if available, otherwise get from provider)
+        try:
+            content: str
+            structure_data: dict | None = None
+
+            # When the chair is an Ollama model, use structured output so the
+            # synthesis includes machine-readable agreements/disagreements metadata.
+            from app.services.ai_providers.ollama_provider import OllamaProvider
+
+            chair_think = self.member_thinking.get(chair_member_id, False) if chair_member_id else False
+
+            if isinstance(chair_provider, OllamaProvider):
+                # Temporarily set model (same pattern as _get_provider_response)
+                original_model = None
+                if chair_model:
+                    original_model = chair_provider.model
+                    chair_provider.model = chair_model
+                try:
+                    json_str = await chair_provider.get_structured_completion(
+                        prompt=full_merge_prompt,
+                        system_prompt=chair_system_prompt,
+                        temperature=temperature,
+                        response_format=ConsensusOutput,
+                        think=chair_think,
+                    )
+                    structured = ConsensusOutput.model_validate_json(json_str)
+                    content = structured.synthesis
+                    structure_data = structured.model_dump(exclude={"synthesis"})
+                except Exception as struct_err:
+                    logger.warning(
+                        f"Structured output failed, falling back to streaming: {struct_err}"
+                    )
+                    content, *_ = await self._get_provider_response(
+                        chair_provider, merge_prompt, temperature,
+                        chair_system_prompt, model=chair_model, think=chair_think,
+                    )
+                finally:
+                    if original_model is not None:
+                        chair_provider.model = original_model
+            else:
+                content, *_ = await self._get_provider_response(
+                    chair_provider, merge_prompt, temperature,
+                    chair_system_prompt, model=chair_model,
+                )
+
+            input_tokens = chair_provider.count_tokens(full_merge_prompt)
+            output_tokens = chair_provider.count_tokens(content)
+            cost = chair_provider.estimate_cost(input_tokens, output_tokens)
+
+            # Save to database
             model_to_save = chair_model if chair_model else getattr(chair_provider, 'model', 'unknown')
             response = Response(
                 session_id=session.id,
@@ -748,7 +803,7 @@ Begin your response with the actual deliverable content immediately."""
             await self.db.commit()
             await self.db.refresh(response)
 
-            yield {
+            event: dict = {
                 "type": "merge",
                 "iteration": iteration,
                 "provider": session.chair_provider,
@@ -760,6 +815,10 @@ Begin your response with the actual deliverable content immediately."""
                 "done": True,
                 "response_id": response.id,
             }
+            if structure_data is not None:
+                event["structure"] = structure_data
+
+            yield event
 
         except Exception as e:
             yield {
@@ -768,7 +827,7 @@ Begin your response with the actual deliverable content immediately."""
             }
 
     async def _get_provider_response(
-        self, provider, prompt: str, temperature: float, system_prompt: str | None = None, model: str | None = None
+        self, provider, prompt: str, temperature: float, system_prompt: str | None = None, model: str | None = None, think: bool = False
     ) -> tuple[str, int, int, float]:
         """
         Get a complete response from a provider.
@@ -802,13 +861,16 @@ Begin your response with the actual deliverable content immediately."""
                 image_to_send = self.image_data
 
             # Collect streamed response with personality system prompt
-            async for chunk in provider.stream_completion(
-                prompt=full_prompt,
-                system_prompt=system_prompt,
-                temperature=temperature,
-                max_tokens=4000,
-                image_data=image_to_send,
-            ):
+            stream_kwargs: dict = {
+                "prompt": full_prompt,
+                "system_prompt": system_prompt,
+                "temperature": temperature,
+                "max_tokens": 4000,
+                "image_data": image_to_send,
+            }
+            if think:
+                stream_kwargs["think"] = True
+            async for chunk in provider.stream_completion(**stream_kwargs):
                 content += chunk
 
             # Count tokens and estimate cost

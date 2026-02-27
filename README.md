@@ -32,7 +32,7 @@ A local web application that creates a "council" of AI models to respond to user
 ## Prerequisites
 
 ### Required
-- **Node.js** 18+ and npm
+- **Node.js** 22+ (Active LTS) and npm
 - **Python** 3.10+
 
 ### Optional (depending on which providers you want to use)
@@ -253,7 +253,7 @@ LLMings/
   ```
 
 ### Frontend won't start
-- **Check Node.js version**: Requires Node 18+
+- **Check Node.js version**: Requires Node 22+ (Active LTS)
   ```bash
   node --version
   ```

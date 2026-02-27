@@ -47,11 +47,15 @@ PROVIDER_CONFIGS = {
         "env_key": "OPENAI_API_KEY",
         "supports_streaming": True,
         "available_models": [
+            # Standard chat models
             "gpt-4o",
             "gpt-4o-mini",
             "gpt-4-turbo",
-            "gpt-4",
             "gpt-3.5-turbo",
+            # Reasoning models (no temperature support, use max_completion_tokens)
+            "o3",
+            "o3-mini",
+            "o1",
         ],
     },
     "anthropic": {
@@ -67,47 +71,82 @@ PROVIDER_CONFIGS = {
         ],
     },
     "google": {
-        "default_model": "gemini-2.0-flash-exp",
+        "default_model": "gemini-2.5-flash",
         "env_key": "GOOGLE_API_KEY",
         "supports_streaming": True,
         "available_models": [
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-pro",
+            "gemini-2.5-flash",      # Best price/performance, hybrid reasoning
+            "gemini-2.5-pro",        # Most capable for complex tasks
+            "gemini-2.5-flash-lite", # Fastest, most budget-friendly
+            "gemini-2.0-flash",      # Previous generation, still available
+            "gemini-1.5-pro",        # Legacy, broader availability
+            "gemini-1.5-flash",      # Legacy, fast and cheap
         ],
     },
     "grok": {
-        "default_model": "grok-beta",
+        "default_model": "grok-3",
         "env_key": "GROK_API_KEY",
         "supports_streaming": True,
         "base_url": "https://api.x.ai/v1",
         "available_models": [
-            "grok-beta",
-            "grok-vision-beta",
+            "grok-4",              # Latest — advanced reasoning + vision
+            "grok-3",              # Released June 2025, 131K context
+            "grok-3-mini",         # Cost-effective, built-in reasoning
+            "grok-2-1212",         # Previous generation
+            "grok-2-vision-1212",  # Previous generation + vision
+            "grok-beta",           # Legacy
         ],
     },
     "ollama": {
-        "default_model": "phi3:mini",
+        "default_model": "llama3.2",
         "env_key": None,  # No API key needed for local
         "supports_streaming": True,
         "base_url": "http://localhost:11434",
         "available_models": [
-            "phi3:mini",
-            "llama3.1",
-            "llama3.1:70b",
-            "llama3",
+            # General — small (≤8GB RAM)
+            "llama3.2",
+            "qwen3:8b",
+            "gemma3",
+            "phi4-mini",
             "mistral",
+            "qwen2.5",
+            "smollm2",
+            # General — medium (≤16GB RAM)
+            "llama3.3",
+            "qwen3:14b",
             "mistral-nemo",
-            "phi3",
-            "phi3:medium",
-            "gemma2",
-            "gemma2:27b",
-            "qwen2",
-            "qwen2:7b",
+            "phi4",
+            "gemma3:12b",
+            # General — large (32GB+ RAM)
+            "llama3.3:70b",
+            "qwen3:32b",
+            "gemma3:27b",
+            "qwen2.5:32b",
+            "mistral-large",
+            "mixtral",
+            # Coding specialists
+            "qwen3-coder",
+            "qwen2.5-coder",
+            "devstral",
+            "deepseek-coder-v2",
+            "mimo-v2-flash",
             "codellama",
-            "llava",  # Vision model
-            "llava-phi3",  # Vision model
+            # Reasoning
+            "deepseek-r1",
+            "deepseek-v3.2",
+            "phi4-reasoning",
+            "phi4-reasoning-plus",
+            "kimi-k2.5",
+            "glm-5",
+            # Cloud-routed (via Ollama API compatibility)
+            "glm-4.7:cloud",
+            "minimax-m2.1:cloud",
+            # Vision
+            "llama3.2-vision",
+            "qwen2.5vl",
+            "llava",
+            "llava-phi3",
+            "moondream",
         ],
         "is_local": True,
     },
@@ -116,26 +155,34 @@ PROVIDER_CONFIGS = {
 # Pricing per 1K tokens (input, output) in USD
 # Note: These are estimates and should be updated regularly
 PRICING = {
-    # OpenAI
+    # OpenAI ($ per 1M tokens)
     "openai:gpt-4o": (2.50, 10.00),
     "openai:gpt-4o-mini": (0.15, 0.60),
     "openai:gpt-4-turbo": (10.00, 30.00),
-    "openai:gpt-4": (30.00, 60.00),
     "openai:gpt-3.5-turbo": (0.50, 1.50),
+    "openai:o3": (10.00, 40.00),
+    "openai:o3-mini": (1.10, 4.40),
+    "openai:o1": (15.00, 60.00),
     # Anthropic
     "anthropic:claude-opus-4-20250514": (15.00, 75.00),
     "anthropic:claude-sonnet-4-20250514": (3.00, 15.00),
     "anthropic:claude-sonnet-3-5-20241022": (3.00, 15.00),
     "anthropic:claude-sonnet-3-5-20240620": (3.00, 15.00),
     "anthropic:claude-haiku-3-5-20241022": (0.80, 4.00),
-    # Google
-    "google:gemini-2.0-flash-exp": (0.00, 0.00),  # Free during preview
+    # Google ($ per 1M tokens — matches the per-1M convention used throughout this dict)
+    "google:gemini-2.5-flash": (0.30, 2.50),
+    "google:gemini-2.5-pro": (1.25, 10.00),
+    "google:gemini-2.5-flash-lite": (0.10, 0.40),
+    "google:gemini-2.0-flash": (0.10, 0.40),
     "google:gemini-1.5-pro": (1.25, 5.00),
     "google:gemini-1.5-flash": (0.075, 0.30),
-    "google:gemini-pro": (0.50, 1.50),
-    # Grok
+    # Grok ($ per 1M tokens)
+    "grok:grok-4": (10.00, 30.00),
+    "grok:grok-3": (3.00, 15.00),
+    "grok:grok-3-mini": (0.30, 0.50),
+    "grok:grok-2-1212": (2.00, 10.00),
+    "grok:grok-2-vision-1212": (2.00, 10.00),
     "grok:grok-beta": (5.00, 15.00),
-    "grok:grok-vision-beta": (5.00, 15.00),
 }
 
 # Preset temperature mappings

@@ -297,6 +297,7 @@ export const useSessionStore = create<SessionStore>()(
                 cost: event.cost || 0,
                 member_id: event.member_id,
                 member_role: event.member_role,
+                structure: event.structure,
               };
 
               set({

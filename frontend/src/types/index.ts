@@ -36,6 +36,7 @@ export interface CouncilMember {
   archetype: string;
   custom_personality?: string;
   is_chair: boolean;
+  enable_thinking?: boolean;
 }
 
 export interface FileAttachment {
@@ -112,6 +113,16 @@ export interface StreamEvent {
   response_id?: number;
   member_id?: string;
   member_role?: string;
+  /** Present on merge events when the chair is an Ollama model. */
+  structure?: ConsensusStructure;
+}
+
+/** Structured metadata emitted by an Ollama chair alongside the synthesis text. */
+export interface ConsensusStructure {
+  key_agreements: string[];
+  key_disagreements: string[];
+  confidence: number;
+  reasoning: string;
 }
 
 export interface CouncilResponse {
@@ -127,6 +138,8 @@ export interface CouncilResponse {
   cost: number;
   member_id?: string;
   member_role?: string;
+  /** Present when the chair is Ollama and structured output succeeded. */
+  structure?: ConsensusStructure;
 }
 
 export interface SessionState {

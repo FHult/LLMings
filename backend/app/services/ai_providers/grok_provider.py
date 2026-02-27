@@ -43,7 +43,16 @@ class GrokProvider(AIProvider):
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
-        messages.append({"role": "user", "content": prompt})
+        if image_data and self.supports_vision():
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
+                ],
+            })
+        else:
+            messages.append({"role": "user", "content": prompt})
 
         try:
             stream = await self.client.chat.completions.create(
@@ -78,6 +87,11 @@ class GrokProvider(AIProvider):
                 raise AIProviderError(f"Grok API error: {str(e)}", provider="grok")
         except Exception as e:
             raise AIProviderError(f"Grok error: {str(e)}", provider="grok")
+
+    def supports_vision(self) -> bool:
+        """grok-4, grok-2-vision-1212, and legacy grok-vision-beta support images."""
+        vision_models = {"grok-4", "grok-2-vision-1212", "grok-vision-beta"}
+        return self.model in vision_models
 
     def count_tokens(self, text: str) -> int:
         """Count tokens (rough estimate for Grok)."""

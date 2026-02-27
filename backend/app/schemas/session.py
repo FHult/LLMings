@@ -29,6 +29,7 @@ class CouncilMember(BaseModel):
     archetype: str = Field(default="balanced", description="Personality archetype ID")
     custom_personality: str | None = Field(default=None, description="Custom personality instructions")
     is_chair: bool = Field(default=False, description="Whether this member is the chair")
+    enable_thinking: bool = Field(default=False, description="Enable reasoning think mode (Qwen3/DeepSeek-R1 on Ollama)")
 
 
 class FileAttachment(BaseModel):

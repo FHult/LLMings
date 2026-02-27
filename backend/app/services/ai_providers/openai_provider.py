@@ -78,13 +78,23 @@ class OpenAIProvider(AIProvider):
             messages.append({"role": "user", "content": prompt})
 
         try:
-            stream = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
+            # o-series reasoning models don't accept `temperature` and use
+            # `max_completion_tokens` instead of the legacy `max_tokens`.
+            if self._is_reasoning_model():
+                stream = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_completion_tokens=max_tokens,
+                    stream=True,
+                )
+            else:
+                stream = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                )
 
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -112,10 +122,13 @@ class OpenAIProvider(AIProvider):
         except Exception as e:
             raise AIProviderError(f"OpenAI error: {str(e)}", provider="openai")
 
+    def _is_reasoning_model(self) -> bool:
+        """Return True for o-series models that don't accept temperature."""
+        return self.model.startswith("o1") or self.model.startswith("o3")
+
     def supports_vision(self) -> bool:
-        """Check if model supports vision."""
-        # GPT-4o and GPT-4 Turbo support vision
-        vision_models = {"gpt-4o", "gpt-4o-mini", "gpt-4-turbo"}
+        """Check if model supports vision input."""
+        vision_models = {"gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3", "o3-mini"}
         return self.model in vision_models
 
     def count_tokens(self, text: str) -> int:

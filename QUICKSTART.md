@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Python 3.10+** installed
-- **Node.js 18+** and npm installed
+- **Node.js 22+** (Active LTS) and npm installed
 - At least one AI provider API key (OpenAI, Anthropic, Google, or Grok)
 
 ## Setup (First Time Only)
