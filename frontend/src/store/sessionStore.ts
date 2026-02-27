@@ -83,7 +83,9 @@ export const useSessionStore = create<SessionStore>()(
           // Store reader for potential cancellation
           set({ _reader: reader });
 
-          // Read the stream
+          // Read the stream with a line buffer so SSE events that span multiple
+          // network chunks are always parsed as a whole line.
+          let lineBuffer = '';
           while (true) {
             const { done, value } = await reader.read();
 
@@ -91,11 +93,11 @@ export const useSessionStore = create<SessionStore>()(
               break;
             }
 
-            // Decode the chunk
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            lineBuffer += decoder.decode(value, { stream: true });
+            const lines = lineBuffer.split('\n');
+            // Keep the last (potentially incomplete) line in the buffer
+            lineBuffer = lines.pop() ?? '';
 
-            // Process each line
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
@@ -156,6 +158,7 @@ export const useSessionStore = create<SessionStore>()(
         const resumeConfig: SessionConfig & { resume_state?: unknown } = {
           ...state._sessionConfig,
           resume_state: {
+            session_id: state.sessionId,
             current_iteration: state.currentIteration,
             responses: state.responses,
             merged_responses: state.mergedResponses,
@@ -194,7 +197,8 @@ export const useSessionStore = create<SessionStore>()(
           // Store reader for potential cancellation
           set({ _reader: reader });
 
-          // Read the stream
+          // Read the stream with a line buffer (same as startSession)
+          let lineBuffer = '';
           while (true) {
             const { done, value } = await reader.read();
 
@@ -202,11 +206,10 @@ export const useSessionStore = create<SessionStore>()(
               break;
             }
 
-            // Decode the chunk
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            lineBuffer += decoder.decode(value, { stream: true });
+            const lines = lineBuffer.split('\n');
+            lineBuffer = lines.pop() ?? '';
 
-            // Process each line
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);

@@ -16,7 +16,7 @@ class Response(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Foreign key
-    session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
+    session_id = Column(String, ForeignKey("sessions.id"), nullable=False, index=True)
 
     # Provider info
     provider = Column(String, nullable=False)  # 'openai', 'anthropic', etc.

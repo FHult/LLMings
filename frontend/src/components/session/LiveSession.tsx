@@ -1,10 +1,16 @@
 /**
  * LiveSession component - displays real-time streaming council session
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { ResponseCard } from './ResponseCard';
 import { Card } from '@/components/ui/card';
+
+// Discriminated union keeps regular iteration tabs and the final-output tab
+// unambiguous even when finalOutputIteration === currentIteration.
+type SelectedTab =
+  | { type: 'iteration'; n: number }
+  | { type: 'final' };
 
 export const LiveSession: React.FC = () => {
   const {
@@ -23,41 +29,59 @@ export const LiveSession: React.FC = () => {
     clearSession,
   } = useSessionStore();
 
-  const [selectedIteration, setSelectedIteration] = useState(1);
+  const [selectedTab, setSelectedTab] = useState<SelectedTab>({ type: 'iteration', n: 1 });
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-follow the current iteration as it progresses
   useEffect(() => {
     if (status === 'running') {
-      setSelectedIteration(currentIteration);
+      setSelectedTab({ type: 'iteration', n: currentIteration });
     } else if (status === 'completed' && mergedResponses.length > 0) {
-      // Auto-select final output tab when session completes
-      const finalIteration = mergedResponses[mergedResponses.length - 1]?.iteration;
-      if (finalIteration) {
-        setSelectedIteration(finalIteration);
-      }
+      setSelectedTab({ type: 'final' });
     }
   }, [currentIteration, status, mergedResponses]);
+
+  // Auto-scroll to the bottom whenever new content arrives
+  useEffect(() => {
+    if (status === 'running') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [responses.length, mergedResponses.length, status]);
 
   if (status === 'idle') {
     return null;
   }
 
-  // Group responses by iteration
-  const responsesByIteration = responses.reduce((acc, response) => {
-    if (!acc[response.iteration]) {
-      acc[response.iteration] = [];
-    }
-    acc[response.iteration].push(response);
-    return acc;
-  }, {} as Record<number, typeof responses>);
+  // Group responses by iteration — memoised to avoid recomputing every render
+  const responsesByIteration = useMemo(
+    () =>
+      responses.reduce((acc, response) => {
+        if (!acc[response.iteration]) {
+          acc[response.iteration] = [];
+        }
+        acc[response.iteration].push(response);
+        return acc;
+      }, {} as Record<number, typeof responses>),
+    [responses],
+  );
 
   // Available iterations (completed or in progress)
   const availableIterations = Array.from({ length: currentIteration }, (_, i) => i + 1);
 
   // Add "Final Output" tab if session is completed
   const showFinalOutputTab = status === 'completed' && mergedResponses.length > 0;
-  const finalOutputIteration = mergedResponses[mergedResponses.length - 1]?.iteration;
+
+  // Resolve which iteration number the currently-selected tab refers to
+  const selectedIteration =
+    selectedTab.type === 'iteration' ? selectedTab.n : currentIteration;
+
+  // Compute merged response for the selected iteration once (#5)
+  const selectedMergedResponse = mergedResponses.find(
+    (r) => r.iteration === selectedIteration,
+  );
+
+  // Loading skeleton: session is running but no responses have arrived yet
+  const showSkeleton = status === 'running' && availableIterations.length === 0;
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
@@ -154,35 +178,50 @@ export const LiveSession: React.FC = () => {
         )}
       </Card>
 
+      {/* Loading skeleton while first responses are in-flight */}
+      {showSkeleton && (
+        <Card className="p-6 space-y-4 animate-pulse">
+          <div className="h-4 bg-muted rounded w-1/3" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="h-32 bg-muted rounded" />
+            <div className="h-32 bg-muted rounded" />
+          </div>
+        </Card>
+      )}
+
       {/* Iteration Tabs */}
       {availableIterations.length > 0 && (
         <Card className="p-0">
           {/* Tab Headers */}
           <div className="flex border-b bg-muted/50 overflow-x-auto">
-            {availableIterations.map((iteration) => (
-              <button
-                key={iteration}
-                onClick={() => setSelectedIteration(iteration)}
-                className={`px-6 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-                  selectedIteration === iteration
-                    ? 'border-primary text-primary bg-background'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
-              >
-                Iteration {iteration}
-                {iteration === currentIteration && status === 'running' && (
-                  <span className="ml-2 inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                )}
-              </button>
-            ))}
+            {availableIterations.map((iteration) => {
+              const isActive =
+                selectedTab.type === 'iteration' && selectedTab.n === iteration;
+              return (
+                <button
+                  key={iteration}
+                  onClick={() => setSelectedTab({ type: 'iteration', n: iteration })}
+                  className={`px-6 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
+                    isActive
+                      ? 'border-primary text-primary bg-background'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  Iteration {iteration}
+                  {iteration === currentIteration && status === 'running' && (
+                    <span className="ml-2 inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
 
             {/* Final Output Tab */}
             {showFinalOutputTab && (
               <button
                 key="final"
-                onClick={() => setSelectedIteration(finalOutputIteration || currentIteration)}
+                onClick={() => setSelectedTab({ type: 'final' })}
                 className={`px-6 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-                  selectedIteration === finalOutputIteration
+                  selectedTab.type === 'final'
                     ? 'border-green-500 text-green-600 bg-background font-semibold'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
                 }`}
@@ -195,7 +234,7 @@ export const LiveSession: React.FC = () => {
           {/* Tab Content */}
           <div className="p-6 space-y-6">
             {/* Show Final Output view if on final tab */}
-            {showFinalOutputTab && selectedIteration === finalOutputIteration ? (
+            {selectedTab.type === 'final' ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-3 pb-4 border-b">
                   <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -230,20 +269,17 @@ export const LiveSession: React.FC = () => {
                 )}
 
                 {/* Merged response for selected iteration */}
-                {mergedResponses.find((r) => r.iteration === selectedIteration) && (
+                {selectedMergedResponse && (
                   <div className="space-y-3">
                     <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                       {selectedIteration === 1 ? 'Consensus Output' : `Revised Output (Iteration ${selectedIteration})`}
                     </h3>
-                    <ResponseCard
-                      response={mergedResponses.find((r) => r.iteration === selectedIteration)!}
-                      isMerged
-                    />
+                    <ResponseCard response={selectedMergedResponse} isMerged />
                   </div>
                 )}
 
                 {/* Show message if iteration has no content yet */}
-                {!responsesByIteration[selectedIteration] && !mergedResponses.find((r) => r.iteration === selectedIteration) && (
+                {!responsesByIteration[selectedIteration] && !selectedMergedResponse && (
                   <div className="text-center text-muted-foreground py-8">
                     <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                     <p>Waiting for iteration {selectedIteration} responses...</p>

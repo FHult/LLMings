@@ -301,10 +301,9 @@ export default function ProviderSettings() {
           isOpen={true}
           onClose={() => setConfigureProvider(null)}
           onSuccess={() => {
-            alert(
-              'API key saved successfully! Please restart the backend server for changes to take effect.\n\n' +
-              'From the backend directory, run:\n' +
-              'source venv/bin/activate && uvicorn app.main:app --reload'
+            toast.success(
+              'API key saved! Restart the backend server for changes to take effect.',
+              { duration: 6000 },
             );
             fetchProviders();
             setConfigureProvider(null);

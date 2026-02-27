@@ -26,34 +26,38 @@ export const FileUpload: React.FC<FileUploadProps> = ({ files, onFilesChange, di
     setError(null);
 
     try {
-      const uploadedFiles: FileAttachment[] = [];
+      const fileArray = Array.from(selectedFiles);
 
-      for (const file of Array.from(selectedFiles)) {
-        // Client-side file size validation
+      // Validate sizes before uploading anything
+      for (const file of fileArray) {
         if (file.size > VALIDATION.maxFileSize) {
           throw new Error(
             `File "${file.name}" is too large (${formatFileSize(file.size)}). Maximum size is ${VALIDATION.maxFileSizeMB}MB.`
           );
         }
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(API_URLS.uploadFile, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Upload failed');
-        }
-
-        const fileAttachment: FileAttachment = await response.json();
-        uploadedFiles.push(fileAttachment);
       }
 
-      onFilesChange([...files, ...uploadedFiles]);
+      // Upload all files in parallel
+      const uploadResults = await Promise.all(
+        fileArray.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const response = await fetch(API_URLS.uploadFile, {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `Failed to upload "${file.name}"`);
+          }
+
+          return response.json() as Promise<FileAttachment>;
+        }),
+      );
+
+      onFilesChange([...files, ...uploadResults]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload file');
     } finally {

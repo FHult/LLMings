@@ -87,11 +87,7 @@ export function useCouncilData(): UseCouncilDataReturn {
     }
   };
 
-  const deleteTemplate = async (templateId: string, templateName: string): Promise<boolean> => {
-    if (!confirm(`Delete template "${templateName}"?`)) {
-      return false;
-    }
-
+  const deleteTemplate = async (templateId: string, _templateName: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_URLS.templates}/${templateId}`, {
         method: 'DELETE',
@@ -113,49 +109,59 @@ export function useCouncilData(): UseCouncilDataReturn {
     let isMounted = true;
 
     const loadData = async () => {
-      // Always try to fetch archetypes
-      try {
-        const response = await fetch(API_URLS.archetypes);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (isMounted) {
-          setArchetypes(data.archetypes || []);
+      // Fire all three requests in parallel
+      const [archetypesResult, ramResult, templatesResult] = await Promise.allSettled([
+        fetch(API_URLS.archetypes),
+        fetch(API_URLS.systemRamStatus),
+        fetch(API_URLS.templates),
+      ]);
+
+      if (!isMounted) return;
+
+      // Archetypes
+      if (archetypesResult.status === 'fulfilled' && archetypesResult.value.ok) {
+        try {
+          const data = await archetypesResult.value.json();
+          if (isMounted) setArchetypes(data.archetypes || []);
+        } catch (error) {
+          console.error('Failed to parse archetypes:', error);
+          if (!hasShownError.current) {
+            hasShownError.current = true;
+            toast.error('Failed to load personality archetypes');
+          }
         }
-      } catch (error) {
-        console.error('Failed to load archetypes:', error);
-        if (isMounted && !hasShownError.current) {
+      } else if (archetypesResult.status === 'rejected' || !archetypesResult.value?.ok) {
+        console.error('Failed to load archetypes');
+        if (!hasShownError.current) {
           hasShownError.current = true;
           toast.error('Failed to load personality archetypes');
         }
       }
 
-      // Fetch RAM info (optional)
-      try {
-        const response = await fetch(API_URLS.systemRamStatus);
-        if (response.ok && isMounted) {
-          const data = await response.json();
-          const ramMap: ModelRAMInfo = {};
-          data.all_models?.forEach((model: ModelData) => {
-            ramMap[model.name] = {
-              ram_required: model.ram_required,
-              can_run: model.can_run,
-            };
-          });
-          setModelRAMInfo(ramMap);
+      // RAM info (optional)
+      if (ramResult.status === 'fulfilled' && ramResult.value.ok) {
+        try {
+          const data = await ramResult.value.json();
+          if (isMounted) {
+            const ramMap: ModelRAMInfo = {};
+            data.all_models?.forEach((model: ModelData) => {
+              ramMap[model.name] = { ram_required: model.ram_required, can_run: model.can_run };
+            });
+            setModelRAMInfo(ramMap);
+          }
+        } catch {
+          // Silently fail - RAM info is optional
         }
-      } catch {
-        // Silently fail - RAM info is optional
       }
 
-      // Fetch templates (optional)
-      try {
-        const response = await fetch(API_URLS.templates);
-        if (response.ok && isMounted) {
-          const data = await response.json();
-          setTemplates(data);
+      // Templates (optional)
+      if (templatesResult.status === 'fulfilled' && templatesResult.value.ok) {
+        try {
+          const data = await templatesResult.value.json();
+          if (isMounted) setTemplates(data);
+        } catch {
+          // Silently fail - templates are optional
         }
-      } catch {
-        // Silently fail - templates are optional
       }
     };
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useProvidersStore } from '@/store/providersStore';
+import { useUIStore } from '@/store/uiStore';
 import { sessionApi } from '@/lib/api';
 import { PromptInput } from '@/components/prompt/PromptInput';
 import { LiveSession } from '@/components/session/LiveSession';
@@ -13,6 +14,17 @@ function App() {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [activeTab, setActiveTab] = useState<TabType>('council');
   const { loadProviders } = useProvidersStore();
+  const { theme } = useUIStore();
+
+  // Sync theme preference to the document root so Tailwind dark: classes work
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme]);
 
   // Test backend connection and load providers on mount
   useEffect(() => {

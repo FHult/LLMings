@@ -1,4 +1,5 @@
 """Configuration API endpoints for managing API keys and settings."""
+import asyncio
 import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
@@ -30,8 +31,8 @@ def get_env_file_path() -> Path:
     return backend_dir / ".env"
 
 
-def read_env_file() -> dict[str, str]:
-    """Read .env file and return as dict."""
+def _sync_read_env_file() -> dict[str, str]:
+    """Sync helper — run via asyncio.to_thread from async callers."""
     env_path = get_env_file_path()
     env_vars = {}
 
@@ -46,8 +47,8 @@ def read_env_file() -> dict[str, str]:
     return env_vars
 
 
-def write_env_file(env_vars: dict[str, str]) -> None:
-    """Write env vars back to .env file."""
+def _sync_write_env_file(env_vars: dict[str, str]) -> None:
+    """Sync helper — run via asyncio.to_thread from async callers."""
     env_path = get_env_file_path()
 
     with open(env_path, 'w') as f:
@@ -81,6 +82,16 @@ def write_env_file(env_vars: dict[str, str]) -> None:
                 f.write(f"{key}={value}\n")
 
 
+async def read_env_file() -> dict[str, str]:
+    """Read .env file without blocking the event loop."""
+    return await asyncio.to_thread(_sync_read_env_file)
+
+
+async def write_env_file(env_vars: dict[str, str]) -> None:
+    """Write env vars back to .env file without blocking the event loop."""
+    await asyncio.to_thread(_sync_write_env_file, env_vars)
+
+
 @router.post("/config/api-key", response_model=APIKeyResponse)
 async def update_api_key(update: APIKeyUpdate):
     """
@@ -112,13 +123,13 @@ async def update_api_key(update: APIKeyUpdate):
 
     try:
         # Read current .env file
-        env_vars = read_env_file()
+        env_vars = await read_env_file()
 
         # Update the API key
         env_vars[env_key] = update.api_key
 
         # Write back to .env file
-        write_env_file(env_vars)
+        await write_env_file(env_vars)
 
         # Update the environment variable for current process
         os.environ[env_key] = update.api_key
@@ -162,14 +173,14 @@ async def delete_api_key(provider: str):
 
     try:
         # Read current .env file
-        env_vars = read_env_file()
+        env_vars = await read_env_file()
 
         # Remove the API key if it exists
         if env_key in env_vars:
             del env_vars[env_key]
 
         # Write back to .env file
-        write_env_file(env_vars)
+        await write_env_file(env_vars)
 
         # Remove from environment
         if env_key in os.environ:

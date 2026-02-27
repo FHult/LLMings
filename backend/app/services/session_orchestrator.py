@@ -32,6 +32,9 @@ class SessionOrchestrator:
         self.provider_factory = ProviderFactory()
         self.file_context = ""  # Extracted text from files
         self.image_data = None  # Base64 image data for vision models
+        # Per-provider asyncio locks prevent concurrent coroutines from mutating
+        # provider.model on a shared instance at the same time.
+        self._provider_locks: dict[str, asyncio.Lock] = {}
 
     def _get_temperature_for_session(self, session: Session) -> float:
         """Get temperature from session preset."""
@@ -826,6 +829,12 @@ Begin your response with the actual deliverable content immediately."""
                 "message": f"Chair failed to create merge: {str(e)}",
             }
 
+    def _get_provider_lock(self, provider_name: str) -> asyncio.Lock:
+        """Return (creating if needed) a per-provider asyncio lock."""
+        if provider_name not in self._provider_locks:
+            self._provider_locks[provider_name] = asyncio.Lock()
+        return self._provider_locks[provider_name]
+
     async def _get_provider_response(
         self, provider, prompt: str, temperature: float, system_prompt: str | None = None, model: str | None = None, think: bool = False
     ) -> tuple[str, int, int, float]:
@@ -848,38 +857,52 @@ Begin your response with the actual deliverable content immediately."""
 
         content = ""
 
-        # Temporarily set model if specified (for supporting multiple models per provider)
-        original_model = None
-        if model:
-            original_model = provider.model
-            provider.model = model
+        provider_name = getattr(provider, 'name', '') or type(provider).__name__
+        lock = self._get_provider_lock(provider_name)
 
-        try:
-            # Determine if we should send image data
-            image_to_send = None
-            if self.image_data and hasattr(provider, 'supports_vision') and provider.supports_vision():
-                image_to_send = self.image_data
+        async with lock:
+            # Set model on the shared provider instance under the lock so
+            # concurrent coroutines cannot interleave their model assignments.
+            original_model = None
+            if model:
+                original_model = provider.model
+                provider.model = model
 
-            # Collect streamed response with personality system prompt
-            stream_kwargs: dict = {
-                "prompt": full_prompt,
-                "system_prompt": system_prompt,
-                "temperature": temperature,
-                "max_tokens": 4000,
-                "image_data": image_to_send,
-            }
-            if think:
-                stream_kwargs["think"] = True
-            async for chunk in provider.stream_completion(**stream_kwargs):
-                content += chunk
+            try:
+                # Determine if we should send image data
+                image_to_send = None
+                if self.image_data and hasattr(provider, 'supports_vision') and provider.supports_vision():
+                    image_to_send = self.image_data
 
-            # Count tokens and estimate cost
-            input_tokens = provider.count_tokens(full_prompt)
-            output_tokens = provider.count_tokens(content)
-            cost = provider.estimate_cost(input_tokens, output_tokens)
+                # Collect streamed response with personality system prompt
+                stream_kwargs: dict = {
+                    "prompt": full_prompt,
+                    "system_prompt": system_prompt,
+                    "temperature": temperature,
+                    "max_tokens": 4000,
+                    "image_data": image_to_send,
+                }
+                if think:
+                    stream_kwargs["think"] = True
+                async for chunk in provider.stream_completion(**stream_kwargs):
+                    content += chunk
 
-            return content, input_tokens, output_tokens, cost
-        finally:
-            # Restore original model if we changed it
-            if original_model is not None:
-                provider.model = original_model
+                # Use accurate token counts from Ollama's final chunk if available;
+                # fall back to the rough character-based estimate for other providers.
+                from app.services.ai_providers.ollama_provider import OllamaProvider
+                if isinstance(provider, OllamaProvider) and hasattr(provider, 'get_last_token_counts'):
+                    input_tokens, output_tokens = provider.get_last_token_counts()
+                    if not input_tokens:
+                        input_tokens = provider.count_tokens(full_prompt)
+                    if not output_tokens:
+                        output_tokens = provider.count_tokens(content)
+                else:
+                    input_tokens = provider.count_tokens(full_prompt)
+                    output_tokens = provider.count_tokens(content)
+                cost = provider.estimate_cost(input_tokens, output_tokens)
+
+                return content, input_tokens, output_tokens, cost
+            finally:
+                # Restore original model if we changed it
+                if original_model is not None:
+                    provider.model = original_model

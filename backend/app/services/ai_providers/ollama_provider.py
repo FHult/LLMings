@@ -105,6 +105,9 @@ class OllamaProvider(AIProvider):
         self.base_url = base_url or settings.ollama_base_url
         self.name = "ollama"
         self._client = AsyncClient(host=self.base_url)
+        # Populated from the final streaming chunk for accurate token counts
+        self._last_prompt_tokens: int = 0
+        self._last_output_tokens: int = 0
 
     async def stream_completion(
         self,
@@ -141,6 +144,10 @@ class OllamaProvider(AIProvider):
 
         try:
             async for chunk in await self._client.chat(**chat_kwargs):
+                # Capture accurate token counts from the terminal done-chunk
+                if chunk.done:
+                    self._last_prompt_tokens = getattr(chunk, 'prompt_eval_count', 0) or 0
+                    self._last_output_tokens = getattr(chunk, 'eval_count', 0) or 0
                 content = chunk.message.content
                 if content:
                     yield content
@@ -208,6 +215,10 @@ class OllamaProvider(AIProvider):
     def count_tokens(self, text: str) -> int:
         """Rough token estimate (4 chars per token)."""
         return len(text) // 4
+
+    def get_last_token_counts(self) -> tuple[int, int]:
+        """Return (prompt_tokens, output_tokens) from the most recent stream."""
+        return self._last_prompt_tokens, self._last_output_tokens
 
     def get_default_model(self) -> str:
         """Get default Ollama model."""

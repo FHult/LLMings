@@ -81,8 +81,22 @@ async def resume_session(
     # Extract resume state if provided
     resume_state = getattr(session_data, 'resume_state', None)
 
-    # Create session (it will be a new session internally)
-    session = await orchestrator.create_session(session_data)
+    # If resume_state includes a session_id, reuse the existing DB row so
+    # we don't create a duplicate session on every resume.
+    session = None
+    if resume_state and resume_state.get('session_id'):
+        existing_id = resume_state['session_id']
+        result = await db.execute(select(SessionModel).where(SessionModel.id == existing_id))
+        existing = result.scalar_one_or_none()
+        if existing:
+            # Re-initialise orchestrator state from the incoming config
+            await orchestrator.create_session(session_data)
+            existing.status = "running"
+            await db.commit()
+            session = existing
+
+    if session is None:
+        session = await orchestrator.create_session(session_data)
 
     async def event_generator():
         """Generate SSE events for session progress."""

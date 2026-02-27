@@ -1,7 +1,7 @@
 /**
  * Template dialogs for saving and loading council configurations
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { CouncilTemplate } from './hooks/useCouncilData';
 
 interface SaveTemplateDialogProps {
@@ -13,6 +13,17 @@ interface SaveTemplateDialogProps {
 export function SaveTemplateDialog({ isOpen, onClose, onSave }: SaveTemplateDialogProps) {
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -33,7 +44,12 @@ export function SaveTemplateDialog({ isOpen, onClose, onSave }: SaveTemplateDial
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+      {/* Enter key submits the form */}
+      <form
+        className="modal-dialog"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => { e.preventDefault(); handleSave(); }}
+      >
         <h3>Save Council Template</h3>
         <div className="form-group">
           <label>Template Name *</label>
@@ -57,14 +73,14 @@ export function SaveTemplateDialog({ isOpen, onClose, onSave }: SaveTemplateDial
           />
         </div>
         <div className="dialog-actions">
-          <button onClick={handleClose} className="btn-secondary">
+          <button type="button" onClick={handleClose} className="btn-secondary">
             Cancel
           </button>
-          <button onClick={handleSave} className="btn-primary">
+          <button type="submit" className="btn-primary">
             Save Template
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -84,6 +100,16 @@ export function LoadTemplateDialog({
   onLoad,
   onDelete,
 }: LoadTemplateDialogProps) {
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (

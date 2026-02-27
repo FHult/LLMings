@@ -8,6 +8,17 @@ from app.core.constants import PROVIDER_CONFIGS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Module-level cache: avoid reconstructing ProviderFactory (which loads API keys
+# and initialises SDK clients) on every GET /providers request.
+_factory_cache: ProviderFactory | None = None
+
+
+def _get_factory() -> ProviderFactory:
+    global _factory_cache
+    if _factory_cache is None:
+        _factory_cache = ProviderFactory()
+    return _factory_cache
+
 
 @router.get("/providers")
 async def get_providers():
@@ -17,7 +28,7 @@ async def get_providers():
     Returns:
         dict: Provider configuration information
     """
-    factory = ProviderFactory()
+    factory = _get_factory()
 
     providers_info = {}
     for provider_name in factory.get_provider_names():
@@ -56,6 +67,12 @@ async def get_providers():
         "providers": providers_info,
         "configured_count": len(factory.get_provider_names()),
     }
+
+
+def invalidate_provider_cache() -> None:
+    """Invalidate the provider factory cache (call after API key changes)."""
+    global _factory_cache
+    _factory_cache = None
 
 
 @router.get("/providers/{provider_name}/models")
