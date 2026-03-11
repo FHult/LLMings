@@ -19,11 +19,15 @@ class CouncilTemplate(Base):
 
     def to_dict(self):
         """Convert to dictionary."""
+        try:
+            members = json.loads(self.members_json)
+        except (json.JSONDecodeError, TypeError):
+            members = []
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            "members": json.loads(self.members_json),
+            "members": members,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

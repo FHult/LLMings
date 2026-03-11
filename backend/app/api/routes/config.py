@@ -29,7 +29,7 @@ class APIKeyUpdate(BaseModel):
     """Schema for updating an API key."""
 
     provider: str = Field(..., description="Provider name (openai, anthropic, google, grok)")
-    api_key: str = Field(..., min_length=1, description="API key value")
+    api_key: str = Field(..., min_length=1, max_length=512, description="API key value")
 
 
 class APIKeyResponse(BaseModel):

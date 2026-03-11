@@ -104,7 +104,9 @@ class OllamaProvider(AIProvider):
         super().__init__(api_key, model)
         self.base_url = base_url or settings.ollama_base_url
         self.name = "ollama"
-        self._client = AsyncClient(host=self.base_url)
+        # 300 s covers even slow models on CPU; streaming keeps the connection
+        # alive during generation so this only applies to the initial connection.
+        self._client = AsyncClient(host=self.base_url, timeout=300)
         # Populated from the final streaming chunk for accurate token counts
         self._last_prompt_tokens: int = 0
         self._last_output_tokens: int = 0

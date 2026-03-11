@@ -1,4 +1,6 @@
 """API routes for Ollama provider management."""
+import json
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -101,7 +103,6 @@ async def pull_model(request: PullModelRequest):
                 return
 
             async for status in provider.pull_model(request.model_name):
-                import json
                 yield f"data: {json.dumps(status)}\n\n"
 
                 if "error" in status:
@@ -148,7 +149,6 @@ async def download_mlx_model(request: DownloadMLXRequest):
             request.model_key,
             request.custom_repo
         ):
-            import json
             yield f"data: {json.dumps(status)}\n\n"
 
             if "error" in status:
@@ -170,8 +170,6 @@ async def download_mlx_model(request: DownloadMLXRequest):
 @router.delete("/ollama/models/{model_name}")
 async def delete_model(model_name: str):
     """Delete a model from Ollama."""
-    import httpx
-
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(

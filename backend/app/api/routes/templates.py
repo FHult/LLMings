@@ -13,11 +13,23 @@ from app.models.council_template import CouncilTemplate
 router = APIRouter()
 
 
+class TemplateMember(BaseModel):
+    """A council member entry stored in a template."""
+    id: str
+    provider: str
+    model: str
+    role: str
+    archetype: str = "balanced"
+    custom_personality: Optional[str] = None
+    is_chair: bool = False
+    enable_thinking: bool = False
+
+
 class SaveTemplateRequest(BaseModel):
     """Request to save a council template."""
     name: str
     description: Optional[str] = None
-    members: list[dict]
+    members: list[TemplateMember]
 
 
 class TemplateResponse(BaseModel):
@@ -49,7 +61,7 @@ async def save_template(request: SaveTemplateRequest, db: AsyncSession = Depends
         id=template_id,
         name=request.name,
         description=request.description,
-        members_json=json.dumps(request.members)
+        members_json=json.dumps([m.model_dump() for m in request.members])
     )
 
     db.add(template)
@@ -107,7 +119,7 @@ async def update_template(
 
     template.name = request.name
     template.description = request.description
-    template.members_json = json.dumps(request.members)
+    template.members_json = json.dumps([m.model_dump() for m in request.members])
 
     await db.commit()
     await db.refresh(template)
