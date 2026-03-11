@@ -1,6 +1,7 @@
 """Provider API routes."""
+import asyncio
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.services.ai_providers import ProviderFactory
 from app.core.constants import PROVIDER_CONFIGS
@@ -11,12 +12,14 @@ router = APIRouter()
 # Module-level cache: avoid reconstructing ProviderFactory (which loads API keys
 # and initialises SDK clients) on every GET /providers request.
 _factory_cache: ProviderFactory | None = None
+_factory_lock = asyncio.Lock()
 
 
-def _get_factory() -> ProviderFactory:
+async def _get_factory() -> ProviderFactory:
     global _factory_cache
-    if _factory_cache is None:
-        _factory_cache = ProviderFactory()
+    async with _factory_lock:
+        if _factory_cache is None:
+            _factory_cache = ProviderFactory()
     return _factory_cache
 
 
@@ -28,7 +31,7 @@ async def get_providers():
     Returns:
         dict: Provider configuration information
     """
-    factory = _get_factory()
+    factory = await _get_factory()
 
     providers_info = {}
     for provider_name in factory.get_provider_names():
@@ -69,10 +72,11 @@ async def get_providers():
     }
 
 
-def invalidate_provider_cache() -> None:
+async def invalidate_provider_cache() -> None:
     """Invalidate the provider factory cache (call after API key changes)."""
     global _factory_cache
-    _factory_cache = None
+    async with _factory_lock:
+        _factory_cache = None
 
 
 @router.get("/providers/{provider_name}/models")
@@ -87,7 +91,7 @@ async def get_provider_models(provider_name: str):
         dict: Available models for the provider
     """
     if provider_name not in PROVIDER_CONFIGS:
-        return {"error": f"Provider '{provider_name}' not found"}, 404
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
 
     config = PROVIDER_CONFIGS[provider_name]
 

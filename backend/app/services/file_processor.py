@@ -92,9 +92,17 @@ class FileProcessor:
     def _process_image(file_content: bytes, ext: str) -> tuple[str, str | None]:
         """Process image file and return description + base64 data."""
         try:
-            # Validate image
+            # Validate image — use verify=True path to avoid loading pixel data
+            # for structurally invalid files, then reopen for actual processing.
             img = Image.open(io.BytesIO(file_content))
             width, height = img.size
+
+            # Guard against decompression bombs: a 1-byte-per-pixel 32k×32k
+            # image fits in 10 MB compressed but expands to ~1 GB in memory.
+            MAX_DIMENSION = 16384  # 16 k px per side
+            if width > MAX_DIMENSION or height > MAX_DIMENSION:
+                return f"[Image too large: {width}x{height}px. Maximum dimension is {MAX_DIMENSION}px.]", None
+
             mode = img.mode
 
             # Convert to RGB if necessary (for JPEG encoding)

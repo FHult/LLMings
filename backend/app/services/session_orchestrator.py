@@ -58,6 +58,13 @@ class SessionOrchestrator:
         # default when two members share the same provider with different models).
         self.provider_factory = ProviderFactory()
 
+        # Pre-populate per-provider locks so _get_provider_lock never races
+        # between two coroutines both seeing a missing key simultaneously.
+        self._provider_locks = {
+            member.provider: asyncio.Lock()
+            for member in config.council_members
+        }
+
         self.member_personalities = {}
         self.member_thinking: dict[str, bool] = {}
         for member in config.council_members:
@@ -73,6 +80,9 @@ class SessionOrchestrator:
             for file in config.files:
                 if file.extracted_text:
                     file_texts.append(f"=== File: {file.filename} ===\n{file.extracted_text}")
+                # Only the first image is forwarded to vision models; subsequent
+                # images are silently ignored because provider APIs accept one
+                # image per request.
                 if file.base64_data and not self.image_data:
                     self.image_data = file.base64_data
             if file_texts:

@@ -1,6 +1,6 @@
 """Session schemas."""
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.validation import (
     MAX_PROMPT_LENGTH,
@@ -10,6 +10,8 @@ from app.core.validation import (
     MAX_COUNCIL_MEMBERS,
     MIN_COUNCIL_MEMBERS,
 )
+
+_VALID_PROVIDERS = {"openai", "anthropic", "google", "grok", "ollama"}
 
 
 class ModelConfig(BaseModel):
@@ -27,9 +29,16 @@ class CouncilMember(BaseModel):
     model: str = Field(..., description="Model name to use")
     role: str = Field(..., description="Display name/role for this member")
     archetype: str = Field(default="balanced", description="Personality archetype ID")
-    custom_personality: str | None = Field(default=None, description="Custom personality instructions")
+    custom_personality: str | None = Field(default=None, max_length=MAX_PROMPT_LENGTH, description="Custom personality instructions")
     is_chair: bool = Field(default=False, description="Whether this member is the chair")
     enable_thinking: bool = Field(default=False, description="Enable reasoning think mode (Qwen3/DeepSeek-R1 on Ollama)")
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        if v not in _VALID_PROVIDERS:
+            raise ValueError(f"Unknown provider '{v}'. Must be one of: {', '.join(sorted(_VALID_PROVIDERS))}")
+        return v
 
 
 class FileAttachment(BaseModel):

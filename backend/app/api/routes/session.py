@@ -44,7 +44,7 @@ async def create_session(
                 yield f"data: {json.dumps(update)}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error_type': type(e).__name__, 'message': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -91,8 +91,12 @@ async def resume_session(
         if existing:
             # Re-initialise in-memory orchestrator state only — no new DB row.
             orchestrator._init_state_from_config(session_data)
-            existing.status = "running"
-            await db.commit()
+            try:
+                existing.status = "running"
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise HTTPException(status_code=500, detail="Failed to resume session")
             session = existing
 
     if session is None:
@@ -115,7 +119,7 @@ async def resume_session(
                     yield f"data: {json.dumps(update)}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error_type': type(e).__name__, 'message': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),
