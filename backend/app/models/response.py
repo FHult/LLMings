@@ -1,6 +1,6 @@
 """Response database model."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Float
 from sqlalchemy.orm import relationship
 
@@ -13,7 +13,7 @@ class Response(Base):
     __tablename__ = "responses"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Foreign key
     session_id = Column(String, ForeignKey("sessions.id"), nullable=False, index=True)

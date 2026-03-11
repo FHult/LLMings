@@ -79,7 +79,7 @@ async def resume_session(
     orchestrator = SessionOrchestrator(db)
 
     # Extract resume state if provided
-    resume_state = getattr(session_data, 'resume_state', None)
+    resume_state = session_data.resume_state
 
     # If resume_state includes a session_id, reuse the existing DB row so
     # we don't create a duplicate session on every resume.

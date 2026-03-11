@@ -8,20 +8,23 @@ Coordinates the entire council session flow:
 """
 
 import asyncio
+import json
 import logging
+import uuid
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.session import Session
-
-logger = logging.getLogger(__name__)
-
 from app.models.response import Response
 from app.schemas.session import SessionCreate
 from app.schemas.consensus import ConsensusOutput
 from app.services.ai_providers.provider_factory import ProviderFactory
+from app.services.ai_providers.ollama_provider import OllamaProvider
 from app.core.constants import MERGE_TEMPLATES, PRESET_CONFIGS
+from app.core.personality_archetypes import get_archetype_system_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class SessionOrchestrator:
@@ -47,16 +50,13 @@ class SessionOrchestrator:
         Separated from the DB write so the resume path can call this without
         creating an orphaned session row.
         """
-        import json
-        from app.core.personality_archetypes import get_archetype_system_prompt
-
         self.council_members = config.council_members
 
-        model_configs = {}
-        for member in config.council_members:
-            model_configs[member.provider] = member.model
-        if model_configs:
-            self.provider_factory = ProviderFactory(model_configs=model_configs)
+        # Initialise a fresh factory using settings/defaults.  Every call site
+        # overrides the model per-request via the per-provider lock, so there is
+        # no need to pass model_configs here (which would overwrite the factory
+        # default when two members share the same provider with different models).
+        self.provider_factory = ProviderFactory()
 
         self.member_personalities = {}
         self.member_thinking: dict[str, bool] = {}
@@ -80,13 +80,10 @@ class SessionOrchestrator:
 
     async def create_session(self, config: SessionCreate) -> Session:
         """Initialise orchestrator state and create a new session row in the DB."""
-        import json
-
         self._init_state_from_config(config)
 
         chair_member = next((m for m in config.council_members if m.is_chair), config.council_members[0])
         council_members_json = json.dumps([m.dict() for m in config.council_members])
-        selected_providers_json = json.dumps([m.provider for m in config.council_members])
 
         session = Session(
             prompt=config.prompt,
@@ -95,7 +92,6 @@ class SessionOrchestrator:
             merge_template=config.template,
             preset=config.preset,
             autopilot=config.autopilot,
-            selected_providers=selected_providers_json,
             council_members=council_members_json,
             status="running",
         )
@@ -125,6 +121,9 @@ class SessionOrchestrator:
                 yield update
                 if update.get("done"):
                     initial_responses.append(update)
+
+            # Image data has been consumed by initial responses; clear to free memory.
+            self.image_data = None
 
             if not initial_responses:
                 yield {"type": "error", "message": "No providers are configured with API keys"}
@@ -187,6 +186,9 @@ class SessionOrchestrator:
         Yields status updates as the session progresses.
         """
         try:
+            # Image data was consumed in the original session's initial responses.
+            self.image_data = None
+
             current_iteration = resume_state.get('current_iteration', 1)
             existing_responses = resume_state.get('responses', [])
             existing_merged = resume_state.get('merged_responses', [])
@@ -287,338 +289,65 @@ class SessionOrchestrator:
             await self.db.commit()
             yield {"type": "error", "message": str(e)}
 
-    async def _collect_responses_from_members(
-        self, session: Session, members: list, iteration: int
+    async def _collect_from_members(
+        self,
+        session: Session,
+        members: list,
+        prompt: str,
+        iteration: int,
+        event_type: str,
     ) -> AsyncGenerator[dict, None]:
-        """Collect initial responses from specific council members."""
+        """Dispatch requests to council members in parallel; stream events as results arrive.
+
+        Pre-generates UUIDs so response IDs are available in SSE events before the DB
+        write.  All inserts are committed in a single batch after the loop, reducing
+        the N per-response commits to one.
+        """
         if not members:
             return
 
         temperature = self._get_temperature_for_session(session)
 
-        # Create wrapper coroutines
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
+        async def run_member(member, provider):
             try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
-                return name, member_model, member_id, result, None
-            except Exception as e:
-                return name, None, member_id, None, e
-
-        # Create tasks for specified members only
-        tasks = []
-        for member in members:
-            provider = self.provider_factory.get_provider(member.provider)
-            if provider:
-                system_prompt = self.member_personalities.get(member.id)
-                tasks.append(get_response_with_name(
-                    provider, member.provider, member.id, member.model,
-                    session.prompt, temperature, system_prompt,
+                result = await self._get_provider_response(
+                    provider, prompt, temperature,
+                    self.member_personalities.get(member.id),
+                    model=member.model,
                     think=self.member_thinking.get(member.id, False),
-                ))
-
-        # Run in parallel and yield results as they complete
-        for coro in asyncio.as_completed(tasks):
-            provider_name, model, member_id, result, error = await coro
-
-            if error:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "message": f"Failed to get response: {str(error)}",
-                }
-                continue
-
-            try:
-                content, input_tokens, output_tokens, cost = result
-
-                # Get member role for display
-                member_role = provider_name
-                member = next((m for m in members if m.id == member_id), None)
-                if member:
-                    member_role = member.role
-
-                # Save to database
-                response = Response(
-                    session_id=session.id,
-                    provider=provider_name,
-                    model=model,
-                    iteration=iteration,
-                    role="council",
-                    content=content,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    estimated_cost=cost,
                 )
-                self.db.add(response)
-                await self.db.commit()
-
-                yield {
-                    "type": "initial_response",
-                    "response_id": response.id,
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "member_role": member_role,
-                    "content": content,
-                    "iteration": iteration,
-                    "tokens": {"input": input_tokens, "output": output_tokens},
-                    "cost": cost,
-                    "done": True,
-                }
+                return member.provider, member.id, member.role, member.model, result, None
             except Exception as e:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "message": f"Failed to save response: {str(e)}",
-                }
+                return member.provider, member.id, member.role, None, None, e
 
-    async def _collect_feedback_from_members(
-        self, session: Session, previous_output: dict, members: list, iteration: int
-    ) -> AsyncGenerator[dict, None]:
-        """Collect feedback from specific council members on previous output."""
-        if not members or not previous_output:
-            return
+        tasks = [
+            run_member(member, self.provider_factory.get_provider(member.provider))
+            for member in members
+            if self.provider_factory.get_provider(member.provider)
+        ]
 
-        temperature = self._get_temperature_for_session(session)
-        prev_content = previous_output.get('content', '')
-
-        feedback_prompt = f"""Original prompt: {session.prompt}
-
-Previous output (iteration {iteration - 1}):
-{prev_content}
-
-Please provide constructive feedback on this output. What could be improved? What's working well? What's missing?"""
-
-        # Create wrapper coroutines
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
-            try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
-                return name, member_model, member_id, result, None
-            except Exception as e:
-                return name, None, member_id, None, e
-
-        # Create tasks for specified members only
-        tasks = []
-        for member in members:
-            provider = self.provider_factory.get_provider(member.provider)
-            if provider:
-                system_prompt = self.member_personalities.get(member.id)
-                tasks.append(get_response_with_name(
-                    provider, member.provider, member.id, member.model,
-                    feedback_prompt, temperature, system_prompt,
-                    think=self.member_thinking.get(member.id, False),
-                ))
-
-        # Run in parallel and yield results as they complete
-        for coro in asyncio.as_completed(tasks):
-            provider_name, model, member_id, result, error = await coro
-
-            if error:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "message": f"Failed to get feedback: {str(error)}",
-                }
-                continue
-
-            try:
-                content, input_tokens, output_tokens, cost = result
-
-                # Get member role for display
-                member_role = provider_name
-                member = next((m for m in members if m.id == member_id), None)
-                if member:
-                    member_role = member.role
-
-                # Save to database
-                response = Response(
-                    session_id=session.id,
-                    provider=provider_name,
-                    model=model,
-                    iteration=iteration,
-                    role="council",
-                    content=content,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    estimated_cost=cost,
-                )
-                self.db.add(response)
-                await self.db.commit()
-
-                yield {
-                    "type": "feedback",
-                    "response_id": response.id,
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "member_role": member_role,
-                    "content": content,
-                    "iteration": iteration,
-                    "tokens": {"input": input_tokens, "output": output_tokens},
-                    "cost": cost,
-                    "done": True,
-                }
-            except Exception as e:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "message": f"Failed to save feedback: {str(e)}",
-                }
-
-    async def _collect_initial_responses(
-        self, session: Session
-    ) -> AsyncGenerator[dict, None]:
-        """Collect initial responses from all council members in parallel."""
-        if not self.council_members:
-            yield {
-                "type": "error",
-                "message": "No council members configured for this session",
-            }
-            return
-
-        temperature = self._get_temperature_for_session(session)
-
-        # Create wrapper coroutines that return provider name, model, and member info with result
-        async def get_response_with_name(provider, name, member_id, member_model, prompt, temp, system_prompt, think=False):
-            try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
-                return name, member_model, member_id, result, None
-            except Exception as e:
-                return name, None, member_id, None, e
-
-        # Create tasks for all council members
-        tasks = []
-        for member in self.council_members:
-            provider = self.provider_factory.get_provider(member.provider)
-            if provider:
-                system_prompt = self.member_personalities.get(member.id)
-                tasks.append(get_response_with_name(
-                    provider, member.provider, member.id, member.model,
-                    session.prompt, temperature, system_prompt,
-                    think=self.member_thinking.get(member.id, False),
-                ))
-
-        # Run all council members in parallel and yield results as they complete
-        for coro in asyncio.as_completed(tasks):
-            provider_name, model, member_id, result, error = await coro
-
-            if error:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "member_id": member_id,
-                    "message": f"Failed to get response: {str(error)}",
-                }
-                continue
-
-            try:
-                content, input_tokens, output_tokens, cost = result
-
-                # Get member role for display
-                member = next((m for m in self.council_members if m.id == member_id), None)
-                member_role = member.role if member else provider_name
-
-                # Save to database
-                response = Response(
-                    session_id=session.id,
-                    provider=provider_name,
-                    model=model,
-                    iteration=1,
-                    role="council",
-                    content=content,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    estimated_cost=cost,
-                )
-                self.db.add(response)
-                await self.db.commit()
-
-                yield {
-                    "type": "initial_response",
-                    "provider": provider_name,
-                    "member_role": member_role,
-                    "member_id": member_id,
-                    "content": content,
-                    "tokens": {"input": input_tokens, "output": output_tokens},
-                    "cost": cost,
-                    "done": True,
-                    "response_id": response.id,
-                }
-
-            except Exception as e:
-                yield {
-                    "type": "error",
-                    "provider": provider_name,
-                    "message": f"Failed to save response: {str(e)}",
-                }
-
-    async def _collect_feedback(
-        self, session: Session, merged_response: dict, iteration: int
-    ) -> AsyncGenerator[dict, None]:
-        """Collect feedback from council members on the merged response."""
-        if not self.council_members:
-            yield {
-                "type": "error",
-                "message": "No council members configured for this session",
-            }
-            return
-
-        # Create wrapper coroutines that return member info with result
-        async def get_feedback_with_member(provider, provider_name, member_id, member_role, member_model, prompt, temp, system_prompt, think=False):
-            try:
-                result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
-                return provider_name, member_id, member_role, member_model, result, None
-            except Exception as e:
-                return provider_name, member_id, member_role, None, None, e
-
-        temperature = self._get_temperature_for_session(session)
-
-        # Create tasks for all council members
-        tasks = []
-        for member in self.council_members:
-            provider = self.provider_factory.get_provider(member.provider)
-            if provider:
-                # Get member's personality system prompt
-                system_prompt = self.member_personalities.get(member.id)
-
-                # Create feedback prompt
-                feedback_prompt = f"""Please review and critique the following merged response:
-
-{merged_response['content']}
-
-Original prompt was: {session.prompt}
-
-Provide constructive feedback on:
-1. What works well
-2. What could be improved
-3. Any missing perspectives or considerations
-4. Specific suggestions for enhancement"""
-
-                tasks.append(get_feedback_with_member(
-                    provider, member.provider, member.id, member.role, member.model,
-                    feedback_prompt, temperature, system_prompt,
-                    think=self.member_thinking.get(member.id, False),
-                ))
-
-        # Run all members in parallel
+        pending_responses = []
         for coro in asyncio.as_completed(tasks):
             provider_name, member_id, member_role, model, result, error = await coro
 
             if error:
                 yield {
                     "type": "error",
+                    "provider": provider_name,
                     "member_id": member_id,
                     "member_role": member_role,
-                    "message": f"Failed to get feedback: {str(error)}",
+                    "message": f"Failed to get response: {str(error)}",
                 }
                 continue
 
             try:
                 content, input_tokens, output_tokens, cost = result
 
+                # Pre-generate the UUID so we can include it in the event now,
+                # before the batch DB commit at the end of the loop.
+                response_id = str(uuid.uuid4())
                 response = Response(
+                    id=response_id,
                     session_id=session.id,
                     provider=provider_name,
                     model=model,
@@ -630,28 +359,95 @@ Provide constructive feedback on:
                     estimated_cost=cost,
                 )
                 self.db.add(response)
-                await self.db.commit()
+                pending_responses.append(response)
 
                 yield {
-                    "type": "feedback",
-                    "iteration": iteration,
+                    "type": event_type,
+                    "response_id": response_id,
                     "provider": provider_name,
                     "member_id": member_id,
                     "member_role": member_role,
                     "content": content,
+                    "iteration": iteration,
                     "tokens": {"input": input_tokens, "output": output_tokens},
                     "cost": cost,
                     "done": True,
-                    "response_id": response.id,
                 }
-
             except Exception as e:
                 yield {
                     "type": "error",
+                    "provider": provider_name,
                     "member_id": member_id,
                     "member_role": member_role,
-                    "message": f"Failed to get feedback: {str(e)}",
+                    "message": f"Failed to process response: {str(e)}",
                 }
+
+        if pending_responses:
+            try:
+                await self.db.commit()
+            except Exception as e:
+                logger.error(f"Failed to commit {len(pending_responses)} responses to DB: {e}")
+
+    async def _collect_initial_responses(
+        self, session: Session
+    ) -> AsyncGenerator[dict, None]:
+        """Collect initial responses from all council members in parallel."""
+        if not self.council_members:
+            yield {"type": "error", "message": "No council members configured for this session"}
+            return
+        async for event in self._collect_from_members(
+            session, self.council_members, session.prompt, 1, "initial_response"
+        ):
+            yield event
+
+    async def _collect_responses_from_members(
+        self, session: Session, members: list, iteration: int
+    ) -> AsyncGenerator[dict, None]:
+        """Collect initial responses from a specific subset of council members (resume path)."""
+        async for event in self._collect_from_members(
+            session, members, session.prompt, iteration, "initial_response"
+        ):
+            yield event
+
+    async def _collect_feedback(
+        self, session: Session, merged_response: dict, iteration: int
+    ) -> AsyncGenerator[dict, None]:
+        """Collect feedback from all council members on the merged response."""
+        if not self.council_members:
+            yield {"type": "error", "message": "No council members configured for this session"}
+            return
+        feedback_prompt = (
+            f"Please review and critique the following merged response:\n\n"
+            f"{merged_response['content']}\n\n"
+            f"Original prompt was: {session.prompt}\n\n"
+            f"Provide constructive feedback on:\n"
+            f"1. What works well\n"
+            f"2. What could be improved\n"
+            f"3. Any missing perspectives or considerations\n"
+            f"4. Specific suggestions for enhancement"
+        )
+        async for event in self._collect_from_members(
+            session, self.council_members, feedback_prompt, iteration, "feedback"
+        ):
+            yield event
+
+    async def _collect_feedback_from_members(
+        self, session: Session, previous_output: dict, members: list, iteration: int
+    ) -> AsyncGenerator[dict, None]:
+        """Collect feedback from a specific subset of council members (resume path)."""
+        if not members or not previous_output:
+            return
+        prev_content = previous_output.get('content', '')
+        feedback_prompt = (
+            f"Original prompt: {session.prompt}\n\n"
+            f"Previous output (iteration {iteration - 1}):\n{prev_content}\n\n"
+            f"Please provide constructive feedback on this output. "
+            f"What could be improved? What's working well? What's missing?"
+        )
+        async for event in self._collect_from_members(
+            session, members, feedback_prompt, iteration, "feedback"
+        ):
+            yield event
 
     async def _create_merge(
         self, session: Session, responses: list[dict], iteration: int, previous_merge: dict = None
@@ -737,8 +533,6 @@ Begin your response with the actual deliverable content immediately."""
 
             # When the chair is an Ollama model, use structured output so the
             # synthesis includes machine-readable agreements/disagreements metadata.
-            from app.services.ai_providers.ollama_provider import OllamaProvider
-
             chair_think = self.member_thinking.get(chair_member_id, False) if chair_member_id else False
 
             if isinstance(chair_provider, OllamaProvider):
@@ -878,7 +672,6 @@ Begin your response with the actual deliverable content immediately."""
 
                 # Use accurate token counts from Ollama's final chunk if available;
                 # fall back to the rough character-based estimate for other providers.
-                from app.services.ai_providers.ollama_provider import OllamaProvider
                 if isinstance(provider, OllamaProvider) and hasattr(provider, 'get_last_token_counts'):
                     input_tokens, output_tokens = provider.get_last_token_counts()
                     if not input_tokens:

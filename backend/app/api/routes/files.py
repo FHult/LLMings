@@ -33,7 +33,7 @@ async def upload_file(file: UploadFile = File(...)):
     if not file.filename or not FileProcessor.is_supported(file.filename):
         raise HTTPException(
             status_code=415,
-            detail=f"Unsupported file type. Supported types: {', '.join(sorted(FileProcessor.SUPPORTED_EXTENSIONS))}"
+            detail="Unsupported file type. See /api/files/supported-types for the full list."
         )
 
     # Process the file
