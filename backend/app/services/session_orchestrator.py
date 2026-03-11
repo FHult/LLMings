@@ -93,7 +93,7 @@ class SessionOrchestrator:
         self._init_state_from_config(config)
 
         chair_member = next((m for m in config.council_members if m.is_chair), config.council_members[0])
-        council_members_json = json.dumps([m.dict() for m in config.council_members])
+        council_members_json = json.dumps([m.model_dump() for m in config.council_members])
 
         session = Session(
             prompt=config.prompt,
