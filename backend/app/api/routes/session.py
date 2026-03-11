@@ -79,7 +79,7 @@ async def resume_session(
     orchestrator = SessionOrchestrator(db)
 
     # Extract resume state if provided
-    resume_state = getattr(session_data, 'resume_state', None)
+    resume_state = session_data.resume_state
 
     # If resume_state includes a session_id, reuse the existing DB row so
     # we don't create a duplicate session on every resume.
@@ -89,8 +89,8 @@ async def resume_session(
         result = await db.execute(select(SessionModel).where(SessionModel.id == existing_id))
         existing = result.scalar_one_or_none()
         if existing:
-            # Re-initialise orchestrator state from the incoming config
-            await orchestrator.create_session(session_data)
+            # Re-initialise in-memory orchestrator state only — no new DB row.
+            orchestrator._init_state_from_config(session_data)
             existing.status = "running"
             await db.commit()
             session = existing
@@ -130,7 +130,7 @@ async def resume_session(
 
 @router.get("/session/{session_id}", response_model=SessionResponse)
 async def get_session(
-    session_id: int,
+    session_id: str,
     db: AsyncSession = Depends(get_db)
 ):
     """

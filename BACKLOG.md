@@ -1,6 +1,6 @@
 # LLMings — Improvement Backlog
 
-Items deferred from the Feb 2026 code review. Ordered roughly by urgency/value.
+Items deferred from code reviews. Ordered roughly by urgency/value.
 
 ---
 
@@ -24,4 +24,3 @@ extend the concept to a richer session summary view:
   disagreements, and confidence score in a visual format (progress bar for confidence,
   checkmarks for agreements, warning triangles for disagreements)
 - Make the summary exportable as JSON alongside the existing session export formats
-

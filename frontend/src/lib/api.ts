@@ -51,16 +51,6 @@ export const sessionApi = {
   },
 
   /**
-   * Get session history
-   */
-  getSessions: async (limit = 20, offset = 0) => {
-    const response = await apiClient.get('/sessions/history', {
-      params: { limit, offset },
-    });
-    return response.data;
-  },
-
-  /**
    * Get full session details
    */
   getSession: async (sessionId: string) => {

@@ -64,12 +64,11 @@ class SessionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_chair_member(self) -> "SessionCreate":
         """Validate that exactly one council member is marked as chair."""
-        if self.council_members:
-            chair_count = sum(1 for m in self.council_members if m.is_chair)
-            if chair_count == 0:
-                raise ValueError("At least one council member must be designated as chair (is_chair=True)")
-            if chair_count > 1:
-                raise ValueError(f"Only one council member can be chair, but {chair_count} are marked as chair")
+        chair_count = sum(1 for m in self.council_members if m.is_chair)
+        if chair_count == 0:
+            raise ValueError("At least one council member must be designated as chair (is_chair=True)")
+        if chair_count > 1:
+            raise ValueError(f"Only one council member can be chair, but {chair_count} are marked as chair")
         return self
 
 

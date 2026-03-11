@@ -73,11 +73,8 @@ class AnthropicProvider(AIProvider):
         Count tokens using Claude's tokenizer.
         Note: This is an approximation. For exact counts, use Anthropic's count_tokens API.
         """
-        try:
-            # Rough estimate: Claude uses ~4 characters per token on average
-            return len(text) // 4
-        except Exception:
-            return len(text) // 4
+        # Rough estimate: Claude uses ~4 characters per token on average
+        return len(text) // 4
 
     def get_default_model(self) -> str:
         """Get default Anthropic model."""

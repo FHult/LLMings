@@ -99,7 +99,7 @@ export interface Session {
 
 export interface StreamEvent {
   type: 'session_created' | 'status' | 'initial_response' | 'merge' | 'feedback' | 'complete' | 'error';
-  session_id?: number;
+  session_id?: string;
   message?: string;
   provider?: string;
   content?: string;
@@ -110,7 +110,7 @@ export interface StreamEvent {
   };
   cost?: number;
   done?: boolean;
-  response_id?: number;
+  response_id?: string;
   member_id?: string;
   member_role?: string;
   /** Present on merge events when the chair is an Ollama model. */
@@ -126,7 +126,7 @@ export interface ConsensusStructure {
 }
 
 export interface CouncilResponse {
-  id: number;
+  id: string;
   provider: string;
   content: string;
   iteration: number;
@@ -143,7 +143,7 @@ export interface CouncilResponse {
 }
 
 export interface SessionState {
-  sessionId: number | null;
+  sessionId: string | null;
   status: 'idle' | 'running' | 'completed' | 'error';
   currentIteration: number;
   totalIterations: number;
