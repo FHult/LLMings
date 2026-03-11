@@ -2,8 +2,25 @@
 import asyncio
 import os
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+
+_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _require_localhost(request: Request) -> None:
+    """Reject requests that do not originate from the local machine.
+
+    The config/api-key endpoints write plaintext credentials to disk and must
+    not be reachable from remote hosts.  If the backend is intentionally
+    exposed to a network, a reverse proxy should block this path at the edge.
+    """
+    host = request.client.host if request.client else None
+    if host not in _LOCALHOST_HOSTS:
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint is only accessible from localhost."
+        )
 
 router = APIRouter()
 
@@ -93,7 +110,7 @@ async def write_env_file(env_vars: dict[str, str]) -> None:
 
 
 @router.post("/config/api-key", response_model=APIKeyResponse)
-async def update_api_key(update: APIKeyUpdate):
+async def update_api_key(update: APIKeyUpdate, request: Request):
     """
     Update an API key for a provider.
 
@@ -104,6 +121,8 @@ async def update_api_key(update: APIKeyUpdate):
     which currently requires a backend restart.
     """
     # Validate provider name
+    _require_localhost(request)
+
     valid_providers = ['openai', 'anthropic', 'google', 'grok']
     if update.provider not in valid_providers:
         raise HTTPException(
@@ -149,12 +168,14 @@ async def update_api_key(update: APIKeyUpdate):
 
 
 @router.delete("/config/api-key/{provider}")
-async def delete_api_key(provider: str):
+async def delete_api_key(provider: str, request: Request):
     """
     Remove an API key for a provider.
 
     This removes the API key from the .env file and environment.
     """
+    _require_localhost(request)
+
     valid_providers = ['openai', 'anthropic', 'google', 'grok']
     if provider not in valid_providers:
         raise HTTPException(

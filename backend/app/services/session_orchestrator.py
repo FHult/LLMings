@@ -41,28 +41,26 @@ class SessionOrchestrator:
         preset_config = PRESET_CONFIGS.get(session.preset, PRESET_CONFIGS["balanced"])
         return preset_config["temperature"]
 
-    async def create_session(self, config: SessionCreate) -> Session:
-        """Create a new session in the database."""
+    def _init_state_from_config(self, config: SessionCreate) -> None:
+        """Initialise in-memory orchestrator state from a SessionCreate config.
+
+        Separated from the DB write so the resume path can call this without
+        creating an orphaned session row.
+        """
         import json
         from app.core.personality_archetypes import get_archetype_system_prompt
 
-        # Store council members configuration for use during execution
         self.council_members = config.council_members
 
-        # Build model configs from council members
         model_configs = {}
         for member in config.council_members:
             model_configs[member.provider] = member.model
-
-        # Create provider factory with runtime model configs
         if model_configs:
             self.provider_factory = ProviderFactory(model_configs=model_configs)
 
-        # Store personality system prompts and think flags for each member
         self.member_personalities = {}
         self.member_thinking: dict[str, bool] = {}
         for member in config.council_members:
-            # Generate system prompt from archetype + custom personality
             personality_prompt = get_archetype_system_prompt(
                 member.archetype,
                 member.custom_personality
@@ -70,31 +68,26 @@ class SessionOrchestrator:
             self.member_personalities[member.id] = personality_prompt
             self.member_thinking[member.id] = getattr(member, "enable_thinking", False)
 
-        # Process file attachments
         if config.files:
             file_texts = []
             for file in config.files:
                 if file.extracted_text:
                     file_texts.append(f"=== File: {file.filename} ===\n{file.extracted_text}")
-                # Store image data for vision models (use the first image)
                 if file.base64_data and not self.image_data:
                     self.image_data = file.base64_data
-
             if file_texts:
                 self.file_context = "\n\n".join(file_texts)
 
-        # Get temperature from preset
-        preset_config = PRESET_CONFIGS.get(config.preset, PRESET_CONFIGS["balanced"])
-        temperature = preset_config["temperature"]
+    async def create_session(self, config: SessionCreate) -> Session:
+        """Initialise orchestrator state and create a new session row in the DB."""
+        import json
 
-        # Find the chair member
+        self._init_state_from_config(config)
+
         chair_member = next((m for m in config.council_members if m.is_chair), config.council_members[0])
-
-        # Serialize council members and selected providers
         council_members_json = json.dumps([m.dict() for m in config.council_members])
         selected_providers_json = json.dumps([m.provider for m in config.council_members])
 
-        # Create session record
         session = Session(
             prompt=config.prompt,
             chair_provider=chair_member.provider,
@@ -541,7 +534,6 @@ Please provide constructive feedback on this output. What could be improved? Wha
                 )
                 self.db.add(response)
                 await self.db.commit()
-                await self.db.refresh(response)
 
                 yield {
                     "type": "initial_response",
@@ -574,12 +566,12 @@ Please provide constructive feedback on this output. What could be improved? Wha
             return
 
         # Create wrapper coroutines that return member info with result
-        async def get_feedback_with_member(provider, member_id, member_role, member_model, prompt, temp, system_prompt, think=False):
+        async def get_feedback_with_member(provider, provider_name, member_id, member_role, member_model, prompt, temp, system_prompt, think=False):
             try:
                 result = await self._get_provider_response(provider, prompt, temp, system_prompt, model=member_model, think=think)
-                return member_id, member_role, member_model, result, None
+                return provider_name, member_id, member_role, member_model, result, None
             except Exception as e:
-                return member_id, member_role, None, None, e
+                return provider_name, member_id, member_role, None, None, e
 
         temperature = self._get_temperature_for_session(session)
 
@@ -605,14 +597,14 @@ Provide constructive feedback on:
 4. Specific suggestions for enhancement"""
 
                 tasks.append(get_feedback_with_member(
-                    provider, member.id, member.role, member.model,
+                    provider, member.provider, member.id, member.role, member.model,
                     feedback_prompt, temperature, system_prompt,
                     think=self.member_thinking.get(member.id, False),
                 ))
 
         # Run all members in parallel
         for coro in asyncio.as_completed(tasks):
-            member_id, member_role, model, result, error = await coro
+            provider_name, member_id, member_role, model, result, error = await coro
 
             if error:
                 yield {
@@ -626,10 +618,9 @@ Provide constructive feedback on:
             try:
                 content, input_tokens, output_tokens, cost = result
 
-                # Save to database with member info
                 response = Response(
                     session_id=session.id,
-                    provider=member_id,  # Store member_id in provider field
+                    provider=provider_name,
                     model=model,
                     iteration=iteration,
                     role="council",
@@ -640,12 +631,11 @@ Provide constructive feedback on:
                 )
                 self.db.add(response)
                 await self.db.commit()
-                await self.db.refresh(response)
 
                 yield {
                     "type": "feedback",
                     "iteration": iteration,
-                    "provider": member_id,  # Use member_id as provider for consistency
+                    "provider": provider_name,
                     "member_id": member_id,
                     "member_role": member_role,
                     "content": content,
@@ -804,7 +794,6 @@ Begin your response with the actual deliverable content immediately."""
             )
             self.db.add(response)
             await self.db.commit()
-            await self.db.refresh(response)
 
             event: dict = {
                 "type": "merge",

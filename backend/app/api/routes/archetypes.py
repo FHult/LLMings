@@ -1,5 +1,5 @@
 """API routes for personality archetypes."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.core.personality_archetypes import get_archetype_list, PERSONALITY_ARCHETYPES
 from app.services.ai_providers.ollama_provider import OllamaProvider
 
@@ -58,7 +58,7 @@ async def get_archetype(archetype_id: str):
         Archetype details including system prompt
     """
     if archetype_id not in PERSONALITY_ARCHETYPES:
-        return {"error": "Archetype not found"}, 404
+        raise HTTPException(status_code=404, detail="Archetype not found")
 
     archetype = PERSONALITY_ARCHETYPES[archetype_id]
     return {
